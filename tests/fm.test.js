@@ -100,6 +100,56 @@ test("hyperedge gain uses FS minus TE", () => {
   );
 });
 
+test("critical nets identify the lone cell on a cut side", () => {
+  const graph = {
+    nodes: "ABCD".split("").map((id) => ({ id })),
+    nets: [
+      { id: "n1", cells: ["A", "B", "C"] },
+      { id: "n2", cells: ["A", "B"] },
+      { id: "n3", cells: ["C", "D"] },
+    ],
+    initialPartition: [0, 1, 0, 0],
+  };
+  const engine = new FMEngine(graph, { slack: 1 });
+  assert.equal(engine.cut, 2);
+  assert.equal(engine.getMetrics().criticalNets, 2);
+
+  const a = engine.getCellDetails("A");
+  assert.equal(a.fs, 1);
+  assert.equal(a.criticalForCell, 1);
+  assert.equal(a.incidentNets.find((net) => net.id === "n1").criticalForCell, false);
+  assert.deepEqual(
+    a.incidentNets.find((net) => net.id === "n1").criticalSides,
+    [false, true],
+  );
+
+  const b = engine.getCellDetails("B");
+  assert.equal(b.fs, 2);
+  assert.equal(b.incidentNets.find((net) => net.id === "n1").criticalForCell, true);
+
+  const n1 = engine.getNetDetails("n1");
+  assert.equal(n1.critical, true);
+  assert.deepEqual(n1.counts, [2, 1]);
+  assert.deepEqual(n1.criticalSides, [false, true]);
+  assert.equal(n1.cells.find((cell) => cell.id === "B").critical, true);
+  assert.equal(n1.cells.find((cell) => cell.id === "A").critical, false);
+  assert.equal(engine.getNetDetails("n3").critical, false);
+  assert.equal(engine.getNetDetails("missing"), null);
+
+  const mixed = new FMEngine(
+    {
+      nodes: "ABCD".split("").map((id) => ({ id })),
+      nets: [{ id: "n1", cells: ["A", "B", "C", "D"] }],
+      initialPartition: [0, 0, 1, 1],
+    },
+    { slack: 1 },
+  );
+  assert.equal(mixed.cut, 1);
+  assert.equal(mixed.getMetrics().criticalNets, 0);
+  assert.equal(mixed.getNetDetails("n1").critical, false);
+  assert.deepEqual(mixed.getNetDetails("n1").criticalSides, [false, false]);
+});
+
 test("every FM move gain exactly equals the cut reduction", () => {
   for (const preset of PRESETS) {
     const engine = new FMEngine(preset.graph, { slack: 1 });

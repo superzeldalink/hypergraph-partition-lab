@@ -29,6 +29,18 @@
     return Math.max(min, Math.min(max, value));
   }
 
+  function isCutCounts(counts) {
+    return counts[0] > 0 && counts[1] > 0;
+  }
+
+  /**
+   * A cut net is critical when one block contains exactly one of its cells.
+   * Moving that lone cell closes the net and contributes +1 to its gain.
+   */
+  function isCriticalCounts(counts) {
+    return isCutCounts(counts) && (counts[0] === 1 || counts[1] === 1);
+  }
+
   function shuffleInPlace(items, rng) {
     for (let i = items.length - 1; i > 0; i -= 1) {
       const j = Math.floor(rng() * (i + 1));
@@ -180,7 +192,7 @@
 
     _computeCut() {
       return this.netCounts.reduce(
-        (total, counts) => total + (counts[0] > 0 && counts[1] > 0 ? 1 : 0),
+        (total, counts) => total + (isCutCounts(counts) ? 1 : 0),
         0,
       );
     }
@@ -475,11 +487,16 @@
       const incidentNets = this.incident[index].map((netIndex) => {
         const net = this.nets[netIndex];
         const counts = this.netCounts[netIndex];
+        const cut = isCutCounts(counts);
+        const critical = isCriticalCounts(counts);
         return {
           id: net.id,
           label: net.label,
           cells: net.cells.map((cellIndex) => this.nodes[cellIndex].label),
-          cut: counts[0] > 0 && counts[1] > 0,
+          cut,
+          critical,
+          criticalForCell: cut && counts[node.side] === 1,
+          criticalSides: [cut && counts[0] === 1, cut && counts[1] === 1],
           counts: counts.slice(),
           size: net.cells.length,
         };
@@ -494,9 +511,37 @@
         gain: breakdown.gain,
         fs: breakdown.fs,
         te: breakdown.te,
+        criticalForCell: breakdown.fs,
         cutNets: incidentNets.filter((net) => net.cut).length,
         incidentNets,
         blockSize: this.blockSizes[node.side],
+      };
+    }
+
+    getNetDetails(netId) {
+      const netIndex = this.nets.findIndex((net) => net.id === String(netId));
+      if (netIndex === -1) return null;
+      const net = this.nets[netIndex];
+      const counts = this.netCounts[netIndex];
+      const cut = isCutCounts(counts);
+      const criticalSides = [cut && counts[0] === 1, cut && counts[1] === 1];
+      return {
+        id: net.id,
+        label: net.label,
+        cut,
+        critical: isCriticalCounts(counts),
+        criticalSides,
+        counts: counts.slice(),
+        size: net.cells.length,
+        cells: net.cells.map((cellIndex) => {
+          const node = this.nodes[cellIndex];
+          return {
+            id: node.id,
+            label: node.label,
+            side: node.side,
+            critical: criticalSides[node.side],
+          };
+        }),
       };
     }
 
@@ -537,6 +582,10 @@
     getMetrics() {
       return {
         cut: this.cut,
+        criticalNets: this.netCounts.reduce(
+          (total, counts) => total + (isCriticalCounts(counts) ? 1 : 0),
+          0,
+        ),
         initialCut: this.initialCut,
         improvement: this.initialCut - this.cut,
         bestCut: this.bestCut,

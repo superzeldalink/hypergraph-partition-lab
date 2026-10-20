@@ -75,6 +75,9 @@
             <strong id="cutValue">12</strong>
             <span class="cut-delta" id="cutDelta">from 12</span>
           </div>
+          <span class="cut-critical" id="criticalSummary" title="Cut nets with exactly one cell on one side. Moving that cell closes the net.">
+            0 critical
+          </span>
         </div>
       </header>
 
@@ -293,7 +296,7 @@
       </section>
       <section>
         <h3>2 · Score every cell</h3>
-        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. FS counts nets where <em>v</em> is the only cell on its side, so moving it closes those nets. TE counts nets wholly on <em>v</em>'s side, so moving it opens a net.</p>
+        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. FS counts nets where <em>v</em> is the only cell on its side, so moving it closes those nets. TE counts nets wholly on <em>v</em>'s side, so moving it opens a net. A cut net with exactly one cell on one side is <strong>critical</strong>; its lone cell can close it by moving.</p>
       </section>
       <section>
         <h3>3 · Move the best cell</h3>
@@ -309,7 +312,7 @@
       </section>
       <section>
         <h3>6 · Read the board</h3>
-        <p>Coral nets cross the cut. The pulsing cell is the next pick. Green and red badges show positive and negative gain. Click a cell for FS, TE, lock state, and incident nets.</p>
+        <p>Coral nets cross the cut. The pulsing cell is the next pick. Green and red badges show positive and negative gain. Click a cell for FS, TE, lock state, and incident nets; critical nets are marked amber, and the board reports the total under the cut.</p>
       </section>
       <section>
         <h3>7 · Edit the graph</h3>

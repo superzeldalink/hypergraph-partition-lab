@@ -25,7 +25,7 @@ No install or build step is required.
 
 - **Step through FM** one action at a time: open a pass, inspect the gain queue, move one cell, or close the current pass. The pulsing cell is the next pick.
 - **Play or run a pass** with adjustable speed, then inspect the move ledger. Rolled-back moves stay in the log but are dimmed.
-- **Inspect any cell** for its live gain, `FS`/`TE` breakdown, lock state, block size, and incident nets.
+- **Inspect any cell** for its live gain, `FS`/`TE` breakdown, lock state, block size, and incident nets. Critical nets are marked in the inspector, and the board shows how many cut nets are critical.
 - **See the partition** as a hypergraph. Coral nets cross the cut; internal nets stay muted. Hyperedges use a small diamond hub.
 - **Tune balance** with a per-block slack (`ceil(n/2) + slack`). Changing it restarts the run at the initial partition.
 - **Edit the graph directly on the board** with `Edit graph`: drag cells to move them, double-click (or use the inspector) to rename, `Add cell` then click the canvas to place a cell, and `Connect` two or more cells into a new net. Select a net line to inspect or delete it, switch a cell's starting block in the inspector, or drag a cell across the cut.
@@ -51,7 +51,7 @@ The solver implements a two-way FM partitioner with unit-size cells and unit-cos
    - `FS(v)` — nets where `v` is the only cell on its side and the net also has cells on the other side. Moving `v` closes those nets.
    - `TE(v)` — nets wholly on `v`'s side. Moving `v` opens those nets.
 
-   For a hyperedge, mixed sides with more than one cell on `v`'s side contribute zero.
+   A cut net is **critical** when either block contains exactly one of its cells. Moving that lone cell across closes the net. `FS(v)` counts the critical nets for which `v` is that lone cell. For a hyperedge, mixed sides with more than one cell on `v`'s side contribute zero.
 3. **Pick and lock.** Select the highest-gain eligible unlocked cell. Ties prefer the move that leaves the blocks more balanced, then the lower cell index. Move the cell and lock it for the rest of the pass.
 4. **Update incrementally.** Net-side counts are updated for every incident net, and only cells sharing one of those nets have their gains recomputed.
 5. **Track the best prefix.** The cut may rise during a pass. The engine snapshots the partition at the lowest cut seen.

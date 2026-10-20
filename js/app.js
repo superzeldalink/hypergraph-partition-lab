@@ -42,6 +42,7 @@
     createNetBtn: document.getElementById("createNetBtn"),
     cutValue: document.getElementById("cutValue"),
     cutDelta: document.getElementById("cutDelta"),
+    criticalSummary: document.getElementById("criticalSummary"),
     countA: document.getElementById("countA"),
     countB: document.getElementById("countB"),
     capNote: document.getElementById("capNote"),
@@ -175,6 +176,30 @@
 
   function queueLabel(details) {
     return details.locked ? "locked" : "unlocked";
+  }
+
+  function netStateBadge(net) {
+    const criticalForCell = Boolean(net.criticalForCell);
+    const state = criticalForCell ? "critical" : net.cut ? "cut" : "internal";
+    const classes = [
+      "net-state",
+      criticalForCell ? "is-critical" : net.cut ? "is-cut" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const criticalSides = [0, 1]
+      .filter((side) => net.criticalSides && net.criticalSides[side])
+      .map(blockName);
+    let detail = "Internal net; every cell is in the same block.";
+    if (net.cut) {
+      detail = `A ${net.counts[0]} · B ${net.counts[1]}.`;
+      if (criticalForCell) {
+        detail += " Critical for this cell: moving it closes the net.";
+      } else if (criticalSides.length) {
+        detail += ` Critical for block ${criticalSides.join(" and ")}.`;
+      }
+    }
+    return `<span class="${classes}" title="${escapeHtml(`${net.id}: ${detail}`)}">${state}</span>`;
   }
 
   function clampNumber(value, min, max) {
@@ -1771,6 +1796,20 @@
       el.cutDelta.textContent = `start ${metrics.initialCut}`;
       el.cutDelta.classList.remove("is-good");
     }
+    let criticalText = "no cut nets";
+    let criticalLabel = "No cut nets.";
+    if (metrics.cut > 0) {
+      if (metrics.criticalNets === metrics.cut) {
+        criticalText = `all ${metrics.cut} critical`;
+        criticalLabel = `All ${metrics.cut} cut nets are critical.`;
+      } else {
+        criticalText = `${metrics.criticalNets} of ${metrics.cut} critical`;
+        criticalLabel = `${metrics.criticalNets} of ${metrics.cut} cut nets are critical.`;
+      }
+    }
+    el.criticalSummary.textContent = criticalText;
+    el.criticalSummary.setAttribute("aria-label", criticalLabel);
+    el.criticalSummary.classList.toggle("has-critical", metrics.criticalNets > 0);
 
     const statusClass = state.editing
       ? "is-editing"
@@ -1982,7 +2021,7 @@
             <div class="net-row">
               <span class="net-id">${escapeHtml(net.id)}</span>
               <span class="net-cells">${net.cells.map(escapeHtml).join(" · ")}</span>
-              <span class="net-state ${net.cut ? "is-cut" : ""}">${net.cut ? "cut" : "internal"}</span>
+              ${netStateBadge(net)}
             </div>`,
           )
           .join("")
@@ -2009,30 +2048,56 @@
         <div class="stat-box"><span>TE</span><b>${details.te}</b></div>
         <div class="stat-box"><span>Block</span><b>${blockName(details.side)}</b></div>
       </div>
-      <div class="net-section-head"><span>Incident nets (${details.incidentNets.length})</span><span>state</span></div>
+      <div class="net-section-head">
+        <span>Incident nets (${details.incidentNets.length})</span>
+        <span class="critical-count${details.fs ? " has-critical" : ""}" title="Nets with exactly one cell on this cell's side; moving this cell would close them.">
+          ${details.fs} critical here
+        </span>
+      </div>
       <div class="net-list">${netRows}</div>`;
   }
 
   function renderEditingInspector() {
     const engine = state.engine;
     if (state.selectedNetId) {
-      const netIndex = engine.nets.findIndex((net) => net.id === state.selectedNetId);
-      if (netIndex === -1) {
+      const net = engine.getNetDetails(state.selectedNetId);
+      if (!net) {
         state.selectedNetId = null;
         renderEditingInspector();
         return;
       }
-      const net = engine.nets[netIndex];
-      const counts = engine.netCounts[netIndex];
-      const cut = counts[0] > 0 && counts[1] > 0;
-      const members = net.cells
-        .map((cellIndex) => engine.nodes[cellIndex])
+      const counts = net.counts;
+      const criticalSides = [0, 1]
+        .filter((side) => net.criticalSides[side])
+        .map((side) => ({
+          side,
+          cell: net.cells.find((cell) => cell.side === side),
+        }));
+      const soleCells = criticalSides
         .map(
-          (node) => `
-            <button class="net-member${node.side === 1 ? " is-b" : ""}" type="button"
-              data-edit-action="select-cell" data-cell-id="${escapeHtml(node.id)}"
-              title="Select ${escapeHtml(node.label)}">
-              ${escapeHtml(node.label)}
+          ({ side, cell }) =>
+            `Only Block ${blockName(side)} cell: <strong>${escapeHtml(cell.label)}</strong>`,
+        )
+        .join(" · ");
+      const criticalCallout = net.critical
+        ? `<div class="critical-callout">
+            <span class="critical-kicker">critical</span>
+            <span>${soleCells}. Moving ${
+              criticalSides.length > 1 ? "either" : "it"
+            } contributes +1 to its gain.</span>
+          </div>`
+        : "";
+      const members = net.cells
+        .map(
+          (cell) => `
+            <button class="net-member${cell.side === 1 ? " is-b" : ""}${
+              cell.critical ? " is-critical" : ""
+            }" type="button"
+              data-edit-action="select-cell" data-cell-id="${escapeHtml(cell.id)}"
+              title="Select ${escapeHtml(cell.label)}${
+                cell.critical ? ` — only cell from Block ${blockName(cell.side)} on this net` : ""
+              }">
+              ${escapeHtml(cell.label)}
             </button>`,
         )
         .join("");
@@ -2048,10 +2113,12 @@
                 maxlength="32" autocomplete="off">
             </label>
             <div class="inspector-sub">
-              ${net.cells.length} cells · ${cut ? "crosses the cut" : "internal to a block"}
+              ${net.cells.length} cells · A ${counts[0]} / B ${counts[1]} ·
+              ${net.critical ? "critical" : net.cut ? "cut" : "internal"}
             </div>
           </div>
         </div>
+        ${criticalCallout}
         <div class="edit-controls">
           <button class="edit-control edit-danger" type="button" data-edit-action="delete-net">
             Delete net
@@ -2079,9 +2146,7 @@
                 data-edit-action="select-net" data-net-id="${escapeHtml(net.id)}">
                 <span class="net-id">${escapeHtml(net.id)}</span>
                 <span class="net-cells">${net.cells.map(escapeHtml).join(" · ")}</span>
-                <span class="net-state ${net.cut ? "is-cut" : ""}">${
-                  net.cut ? "cut" : "internal"
-                }</span>
+                ${netStateBadge(net)}
               </button>`,
             )
             .join("")
@@ -2113,7 +2178,12 @@
           <button class="edit-control edit-danger" type="button" data-edit-action="delete-cell">Delete</button>
         </div>
         <div class="edit-note"><strong>Tip:</strong> double-click the cell on the board to rename it. Drag across the cut line to change its starting block.</div>
-        <div class="net-section-head"><span>Incident nets (${details.incidentNets.length})</span><span>click to inspect</span></div>
+        <div class="net-section-head">
+          <span>Incident nets (${details.incidentNets.length})</span>
+          <span class="critical-count${details.fs ? " has-critical" : ""}" title="Nets with exactly one cell on this cell's side; moving this cell would close them.">
+            ${details.fs} critical here
+          </span>
+        </div>
         <div class="net-list">${netRows}</div>`;
       return;
     }
