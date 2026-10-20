@@ -28,10 +28,14 @@ No install or build step is required.
 - **Inspect any cell** for its live gain, `FS`/`TE` breakdown, lock state, block size, and incident nets.
 - **See the partition** as a hypergraph. Coral nets cross the cut; internal nets stay muted. Hyperedges use a small diamond hub.
 - **Tune balance** with a per-block slack (`ceil(n/2) + slack`). Changing it restarts the run at the initial partition.
-- **Load any hypergraph** from the `Data` dialog as JSON, or copy the current graph out. Seeded random netlists are generated with the `Random` button.
+- **Edit the graph directly on the board** with `Edit graph`: drag cells to move them, double-click (or use the inspector) to rename, `Add cell` then click the canvas to place a cell, and `Connect` two or more cells into a new net. Select a net line to inspect or delete it, switch a cell's starting block in the inspector, or drag a cell across the cut.
+- **Start over without JSON** with `Clear` inside the editor. It wipes every cell and net, keeps an undo snapshot, and turns on the add-cell tool so you can rebuild from an empty board.
+- **Load or export hypergraph JSON** from the `Data` dialog. This is now an optional import/export path rather than the primary editor. Seeded random netlists are generated with the `Random` button.
 - **Shuffle the starting split** with `Re-split start`, or reset back to the original start with `Reset run`.
 
 Keyboard: `Space` play/pause, `S` step, `P` run pass, `R` reset.
+
+Editor keyboard: `V` select/move, `N` add cell, `C` connect, `Enter` create the pending net, `Delete` remove the selected cell/net, `Esc` cancel or deselect, `⌘Z`/`Ctrl+Z` undo.
 
 ## Algorithm
 
@@ -57,7 +61,7 @@ Balance eligibility requires the source block to stay above the lower bound and 
 
 ## Graph JSON
 
-Use the **Data** button to paste a graph. The `initialPartition` field and net labels are optional.
+Direct editing is the primary workflow. The **Data** button remains available for pasting or copying JSON. The `initialPartition`, `layout`, and net labels are optional.
 
 ```json
 {
@@ -80,10 +84,11 @@ Use the **Data** button to paste a graph. The `initialPartition` field and net l
 
 Requirements:
 
-- At least two unique cell IDs.
+- At least two unique cell IDs to finish the graph editor. The editor itself permits a blank draft while you rebuild.
 - Each net needs at least two valid cell IDs; duplicates within a net are removed.
 - `initialPartition` uses `0` for Block A and `1` for Block B. If omitted or the wrong length, the engine uses an alternating start.
 - `edges: [["A","B"], …]` is accepted as a shorthand for two-terminal `nets`.
+- `layout` is optional editor metadata: `{ "A": { "y": 0.2, "dx": 0.04 } }`. `y` is the normalized vertical position and `dx` is the normalized horizontal offset from the cell's block column.
 
 The board is tuned for roughly 18 cells or fewer; larger graphs still run, but labels and nodes get compact.
 
@@ -94,7 +99,7 @@ index.html          App shell, dialogs, SVG board
 css/styles.css      Visual design and responsive layout
 js/fm.js            FM engine, gain calculations, pass/rollback state machine
 js/presets.js       Example hypergraphs and seeded random netlist generator
-js/app.js           GUI, animation, logs, inspector, import/export
+js/app.js           GUI, animation, graph editor, logs, inspector, import/export
 tests/fm.test.js    Node test suite for algorithm invariants and presets
 ```
 
@@ -119,4 +124,5 @@ The suite checks, among other properties:
 - Two-way partitioning only.
 - Unit cell areas and unit net costs; weighted variants are not exposed in the UI.
 - The implementation favors clarity and inspectability over large-instance performance. Gain refresh touches the moved cell's net neighborhood; selection scans eligible unlocked cells.
-- The visual graph is an abstract board, not a force-directed drawing. Cell rows are stable so moves animate horizontally.
+- The visual graph is an abstract board, not a force-directed drawing. Cells stay in their block columns; the editor can adjust vertical order and horizontal offset, and solver moves animate across the cut.
+- Clearing the board creates an empty draft state. Finish editing requires at least two cells; the solver does not run while the editor is open.

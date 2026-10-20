@@ -58,6 +58,14 @@
               <span class="status-dot" aria-hidden="true"></span>
               <span id="statusText">Ready</span>
             </span>
+            <button class="button button-ghost button-edit" id="editBtn" type="button" aria-pressed="false" title="Edit this graph directly on the board">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M4 14.5V16h1.5L15 6.5 13.5 5 4 14.5Z" />
+                <path d="m12.5 6 1.5 1.5" />
+                <path d="M3.5 18h13" />
+              </svg>
+              <span id="editBtnLabel">Edit graph</span>
+            </button>
           </div>
           <p class="board-subtitle" id="graphMeta">12 cells · 15 nets · balanced start</p>
         </div>
@@ -85,6 +93,36 @@
       </div>
 
       <div class="board-stage" id="boardStage">
+        <div class="editor-bar" id="editorBar" hidden>
+          <span class="editor-brand"><i aria-hidden="true"></i>Graph editor</span>
+          <div class="editor-tools" role="group" aria-label="Graph editing tools">
+            <button class="editor-tool is-active" type="button" data-tool="select" aria-pressed="true" title="Select and move cells (V)">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 3 4.1 13 2-4.9L16 9.1 5 3Z" /></svg>
+              <span>Select</span>
+            </button>
+            <button class="editor-tool" type="button" data-tool="add" aria-pressed="false" title="Add a cell (N)">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+              <span>Add cell</span>
+            </button>
+            <button class="editor-tool" type="button" data-tool="connect" aria-pressed="false" title="Connect cells into a net (C)">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="14.5" r="2.2" /><circle cx="15" cy="5.5" r="2.2" /><path d="m6.6 13 6.8-6" /></svg>
+              <span>Connect</span>
+            </button>
+          </div>
+          <span class="editor-tip" id="editorTip">Drag cells · double-click a name to rename</span>
+          <div class="editor-actions">
+            <button class="button button-quiet editor-undo" id="undoEditBtn" type="button" disabled title="Undo graph edit (⌘Z)">Undo</button>
+            <button class="button button-quiet editor-clear" id="clearEditBtn" type="button" title="Remove every cell and net, then start fresh">Clear</button>
+            <button class="button button-quiet editor-delete" id="deleteEditBtn" type="button" disabled title="Delete selected cell or net">Delete</button>
+            <button class="button button-primary editor-done" id="doneEditBtn" type="button">Done</button>
+          </div>
+        </div>
+        <div class="connect-tray" id="connectTray" hidden>
+          <span class="connect-tray-label" id="connectTrayLabel">Pick two or more cells</span>
+          <span class="connect-chips" id="connectChips"></span>
+          <button class="button button-secondary connect-cancel" id="cancelConnectBtn" type="button">Cancel</button>
+          <button class="button button-primary connect-create" id="createNetBtn" type="button" disabled>Create net</button>
+        </div>
         <svg id="graphSvg" viewBox="0 0 1000 640" role="img" aria-labelledby="svgTitle svgDesc">
           <title id="svgTitle">Hypergraph partition board</title>
           <desc id="svgDesc">Cells appear in two blocks. Coral nets cross the cut. Click a cell to inspect it.</desc>
@@ -121,6 +159,7 @@
           </g>
 
           <g id="edgesLayer" aria-hidden="true"></g>
+          <g id="editorLayer" aria-hidden="true"></g>
           <g id="nodesLayer"></g>
         </svg>
       </div>
@@ -272,6 +311,10 @@
         <h3>6 · Read the board</h3>
         <p>Coral nets cross the cut. The pulsing cell is the next pick. Green and red badges show positive and negative gain. Click a cell for FS, TE, lock state, and incident nets.</p>
       </section>
+      <section>
+        <h3>7 · Edit the graph</h3>
+        <p><strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build a net. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it.</p>
+      </section>
     </div>
     <div class="dialog-footer">
       <span>Step = one move (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
@@ -285,7 +328,7 @@
       <form method="dialog"><button class="button button-icon" aria-label="Close graph data">×</button></form>
     </div>
     <h2>Hypergraph JSON</h2>
-    <p class="dialog-lede">Paste a graph, then apply it. Cells need unique IDs; each net is a list of two or more cell IDs. An <code>initialPartition</code> is optional.</p>
+    <p class="dialog-lede">JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. An <code>initialPartition</code> is optional.</p>
     <div class="data-body">
       <textarea id="graphJson" spellcheck="false" aria-label="Hypergraph JSON"></textarea>
       <p class="data-error" id="dataError" role="alert"></p>

@@ -50,11 +50,8 @@
   }
 
   function normalizeGraph(graph) {
-    if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) {
-      throw new Error("A graph needs a non-empty nodes array.");
-    }
-    if (graph.nodes.length < 2) {
-      throw new Error("A two-way partition needs at least two cells.");
+    if (!graph || !Array.isArray(graph.nodes)) {
+      throw new Error("A graph needs a nodes array.");
     }
 
     const seen = new Set();

@@ -25,6 +25,26 @@ function exhaust(engine, maxSteps = 3000) {
   return events;
 }
 
+test("blank and single-cell draft graphs are safe for the visual editor", () => {
+  const engine = new FMEngine({ nodes: [], nets: [] });
+  assert.equal(engine.nodes.length, 0);
+  assert.equal(engine.cut, 0);
+  assert.deepEqual(engine.blockSizes, [0, 0]);
+  assert.equal(engine.advance().type, "pass-start");
+  assert.equal(engine.advance().type, "pass-end");
+  assert.equal(engine.status, STATUS.DONE);
+  engine.reset();
+  assert.equal(engine.status, STATUS.READY);
+
+  const draft = new FMEngine({ nodes: [{ id: "A" }], nets: [] });
+  assert.equal(draft.nodes.length, 1);
+  assert.deepEqual(draft.blockSizes, [1, 0]);
+  draft.advance();
+  assert.equal(draft.status, STATUS.ACTIVE);
+  draft.advance();
+  assert.equal(draft.status, STATUS.DONE);
+});
+
 test("a two-cell graph keeps both blocks non-empty", () => {
   const graph = {
     nodes: [{ id: "A" }, { id: "B" }],
