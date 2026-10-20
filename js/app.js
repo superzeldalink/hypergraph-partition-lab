@@ -801,6 +801,11 @@
       group.addEventListener("pointerup", handleCellPointerUp);
       group.addEventListener("pointercancel", handleCellPointerUp);
       group.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && state.editing && state.tool === "connect") {
+          event.preventDefault();
+          createNetFromSelection();
+          return;
+        }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           selectNode(node.id);
@@ -1202,7 +1207,11 @@
   }
 
   function createNetFromSelection() {
-    if (!state.editing || state.connectIds.length < 2) return;
+    if (!state.editing) return;
+    if (state.connectIds.length < 2) {
+      showToast("Pick at least two cells to create a net");
+      return;
+    }
     const cells = state.connectIds.slice();
     const key = cells.slice().sort().join("|");
     const duplicate = state.graph.nets.find((net) => {
@@ -2581,6 +2590,7 @@
         return;
       }
       if (event.key === "Enter" && state.tool === "connect") {
+        if (tag === "BUTTON" || tag === "A") return;
         event.preventDefault();
         createNetFromSelection();
         return;
