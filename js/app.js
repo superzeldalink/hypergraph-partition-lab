@@ -730,12 +730,12 @@
         class: "cell-inner",
         r: Math.max(7, radius - 4),
       });
-      const baseFont = Math.min(18, Math.max(8, radius * 1.05));
+      const baseFont = Math.min(15, Math.max(6, radius * 0.9));
       const labelFont =
         node.label.length > 2
-          ? Math.min(11, Math.max(6, baseFont * 0.72))
+          ? Math.min(10, Math.max(5, baseFont * 0.72))
           : node.label.length === 2
-            ? Math.min(15, Math.max(7, baseFont * 0.85))
+            ? Math.min(12, Math.max(6, baseFont * 0.85))
             : baseFont;
       const label = svgElement("text", {
         class: "cell-label",
