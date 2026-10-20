@@ -1,0 +1,18 @@
+{
+  "name": "fm-partition-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive Fiduccia-Mattheyses hypergraph partitioning solver with a step-through GUI.",
+  "scripts": {
+    "start": "python3 -m http.server 4173",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "fiduccia-mattheyses",
+    "hypergraph",
+    "partitioning",
+    "eda",
+    "visualization"
+  ],
+  "license": "UNLICENSED"
+}

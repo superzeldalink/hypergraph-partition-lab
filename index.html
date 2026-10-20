@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>FM Partition Lab · Fiduccia–Mattheyses</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-header">
+    <a class="brand" href="#" aria-label="FM Partition Lab home">
+      <span class="brand-mark" aria-hidden="true">
+        <span class="brand-block brand-block-a">A</span>
+        <span class="brand-cut"></span>
+        <span class="brand-block brand-block-b">B</span>
+      </span>
+      <span class="brand-copy">
+        <span class="brand-title">FM Partition Lab</span>
+        <span class="brand-subtitle">Fiduccia–Mattheyses hypergraph partitioning</span>
+      </span>
+    </a>
+
+    <div class="header-actions">
+      <label class="select-shell" for="presetSelect">
+        <span>Example</span>
+        <select id="presetSelect" aria-label="Choose an example hypergraph"></select>
+      </label>
+      <button class="button button-ghost button-random" id="randomBtn" type="button" title="Generate a seeded random netlist">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M3 5.5h3.2c1.4 0 2.4.7 3.3 2l1 1.8c.8 1.3 1.8 2 3.2 2H17" />
+          <path d="m14.5 9 2.5 2.3-2.5 2.3" />
+          <path d="M3 14.5h3.1c1.4 0 2.4-.6 3.2-1.7" />
+          <path d="M11.7 6.4c.7-.6 1.5-.9 2.4-.9H17" />
+          <path d="m14.5 3 2.5 2.4-2.5 2.4" />
+        </svg>
+        <span>Random</span>
+      </button>
+      <button class="button button-ghost button-data" id="dataBtn" type="button" title="Import or export hypergraph JSON">
+        <span class="data-braces" aria-hidden="true">{ }</span>
+        <span>Data</span>
+      </button>
+      <button class="button button-icon" id="helpBtn" type="button" title="How FM works" aria-label="How FM works">
+        <span>?</span>
+      </button>
+    </div>
+  </div>
+
+  <main class="workspace">
+    <section class="board-card" aria-label="Partition visualization">
+      <header class="board-toolbar">
+        <div class="title-group">
+          <span class="eyebrow">Partition board</span>
+          <div class="board-title-row">
+            <h1 id="graphTitle">Signal hypergraph</h1>
+            <span class="status-pill" id="statusPill">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="statusText">Ready</span>
+            </span>
+          </div>
+          <p class="board-subtitle" id="graphMeta">12 cells · 15 nets · balanced start</p>
+        </div>
+        <div class="cut-readout">
+          <span class="cut-label">Cut nets</span>
+          <div class="cut-number-row">
+            <strong id="cutValue">12</strong>
+            <span class="cut-delta" id="cutDelta">from 12</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="balance-strip" aria-label="Block balance">
+        <div class="balance-labels">
+          <span class="block-label block-label-a"><i></i>Block A <b id="countA">6</b></span>
+          <span class="balance-cap" id="capNote">cap 7 / block</span>
+          <span class="block-label block-label-b"><b id="countB">6</b> Block B<i></i></span>
+        </div>
+        <div class="balance-track" id="balanceTrack">
+          <span class="balance-fill balance-fill-a" id="balanceA"></span>
+          <span class="balance-fill balance-fill-b" id="balanceB"></span>
+          <span class="cap-marker cap-marker-left" id="capMarkerLeft" title="Maximum block size"></span>
+          <span class="cap-marker cap-marker-right" id="capMarkerRight" title="Maximum block size"></span>
+        </div>
+      </div>
+
+      <div class="board-stage" id="boardStage">
+        <svg id="graphSvg" viewBox="0 0 1000 640" role="img" aria-labelledby="svgTitle svgDesc">
+          <title id="svgTitle">Hypergraph partition board</title>
+          <desc id="svgDesc">Cells appear in two blocks. Coral nets cross the cut. Click a cell to inspect it.</desc>
+          <defs>
+            <linearGradient id="blockAGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#0b1625" stop-opacity="0.78" />
+              <stop offset="100%" stop-color="#0b1420" stop-opacity="0.18" />
+            </linearGradient>
+            <linearGradient id="blockBGradient" x1="1" y1="0" x2="0" y2="0">
+              <stop offset="0%" stop-color="#19150e" stop-opacity="0.62" />
+              <stop offset="100%" stop-color="#12141a" stop-opacity="0.14" />
+            </linearGradient>
+            <filter id="nodeGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
+          </defs>
+
+          <rect id="blockABg" x="0" y="0" width="500" height="640" fill="url(#blockAGradient)" />
+          <rect id="blockBBg" x="500" y="0" width="500" height="640" fill="url(#blockBGradient)" />
+          <line class="cut-line" id="cutLine" x1="500" y1="28" x2="500" y2="612" />
+          <g class="block-headings" aria-hidden="true">
+            <text class="block-kicker block-kicker-a" id="blockAKicker" x="48" y="48">BLOCK A</text>
+            <text class="block-kicker block-kicker-b" id="blockBKicker" x="952" y="48" text-anchor="end">BLOCK B</text>
+            <text class="block-count" id="blockACountLabel" x="48" y="72">6 cells</text>
+            <text class="block-count" id="blockBCountLabel" x="952" y="72" text-anchor="end">6 cells</text>
+            <text class="cut-flag" id="cutFlag" x="500" y="38" text-anchor="middle">CUT</text>
+          </g>
+
+          <g id="edgesLayer" aria-hidden="true"></g>
+          <g id="nodesLayer"></g>
+        </svg>
+      </div>
+
+      <footer class="board-footer">
+        <div class="legend" aria-label="Legend">
+          <span><i class="legend-line legend-internal"></i>Internal net</span>
+          <span><i class="legend-line legend-cut"></i>Cut net</span>
+          <span><i class="legend-node"></i>Unlocked cell</span>
+          <span><i class="legend-lock"></i>Locked</span>
+        </div>
+        <p class="next-step" id="nextStep">Press Step to compute gains for pass 1.</p>
+      </footer>
+
+      <div class="phase-strip" id="phaseStrip" aria-label="FM pass anatomy">
+        <div class="phase" data-phase="0"><span class="phase-index">01</span><span>Split</span></div>
+        <span class="phase-arrow" aria-hidden="true">›</span>
+        <div class="phase" data-phase="1"><span class="phase-index">02</span><span>Gain buckets</span></div>
+        <span class="phase-arrow" aria-hidden="true">›</span>
+        <div class="phase" data-phase="2"><span class="phase-index">03</span><span>Pick best</span></div>
+        <span class="phase-arrow" aria-hidden="true">›</span>
+        <div class="phase" data-phase="3"><span class="phase-index">04</span><span>Move &amp; lock</span></div>
+        <span class="phase-arrow" aria-hidden="true">›</span>
+        <div class="phase" data-phase="4"><span class="phase-index">05</span><span>Update gains</span></div>
+        <span class="phase-arrow" aria-hidden="true">›</span>
+        <div class="phase" data-phase="5"><span class="phase-index">06</span><span>Best prefix</span></div>
+      </div>
+    </section>
+
+    <aside class="sidebar" aria-label="Solver controls">
+      <section class="panel run-panel">
+        <div class="panel-heading">
+          <span class="eyebrow">Run control</span>
+          <span class="key-hint">Space · S · P</span>
+        </div>
+        <div class="transport">
+          <button class="button button-primary" id="playBtn" type="button">
+            <svg class="icon-play" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6V4Z" /></svg>
+            <svg class="icon-pause" viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 4.5v11M13.5 4.5v11" /></svg>
+            <span id="playLabel">Play</span>
+          </button>
+          <button class="button button-secondary" id="stepBtn" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 7 5-7 5V5Z" /><path d="M15 5v10" /></svg>
+            <span>Step</span>
+          </button>
+          <button class="button button-secondary" id="passBtn" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h6M4 10h6M4 15h6" /><path d="m12 6 4 4-4 4" /></svg>
+            <span>Run pass</span>
+          </button>
+        </div>
+        <div class="secondary-actions">
+          <button class="button button-quiet" id="resetBtn" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 9a6 6 0 1 1 1.3 4.7" /><path d="M4 4.5V9h4.5" /></svg>
+            Reset run
+          </button>
+          <button class="button button-quiet" id="resplitBtn" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v4h4M4 8a7 7 0 0 1 12-2" /><path d="M16 16v-4h-4M16 12a7 7 0 0 1-12 2" /></svg>
+            Re-split start
+          </button>
+        </div>
+
+        <label class="slider-row" for="speedRange">
+          <span class="slider-label">Playback speed <output id="speedOut">1.0×</output></span>
+          <input id="speedRange" type="range" min="0.5" max="3" value="1" step="0.5">
+        </label>
+        <label class="slider-row" for="slackRange">
+          <span class="slider-label">Balance slack <output id="slackOut">+1 cell</output></span>
+          <input id="slackRange" type="range" min="0" max="3" value="1" step="1">
+          <span class="slider-help" id="slackHelp">Each block may grow to 7 of 12 cells.</span>
+        </label>
+      </section>
+
+      <section class="metrics" aria-label="Solver metrics">
+        <div class="metric">
+          <span class="metric-label">Cut</span>
+          <strong id="metricCut">12</strong>
+          <span class="metric-foot" id="metricImprovement">start 12</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Pass</span>
+          <strong id="metricPass">0</strong>
+          <span class="metric-foot" id="metricPassState">ready</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Kept moves</span>
+          <strong id="metricKept">0</strong>
+          <span class="metric-foot" id="metricAttempted">0 attempted</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Pass gain</span>
+          <strong id="metricGain">0</strong>
+          <span class="metric-foot" id="metricBestPrefix">best 12</span>
+        </div>
+      </section>
+
+      <section class="panel inspector-panel">
+        <div class="panel-heading">
+          <span class="eyebrow">Cell inspector</span>
+          <span class="panel-hint" id="inspectorHint">click a cell</span>
+        </div>
+        <div id="inspectorBody" class="inspector-body">
+          <div class="empty-state">
+            <span class="empty-glyph" aria-hidden="true">⌖</span>
+            <p>Select any cell to see its gain breakdown and incident nets.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel detail-panel">
+        <div class="tabs" role="tablist" aria-label="Solver details">
+          <button class="tab is-active" id="tab-log" data-tab="log" role="tab" aria-selected="true" aria-controls="tabPanel">Move log</button>
+          <button class="tab" id="tab-gains" data-tab="gains" role="tab" aria-selected="false" aria-controls="tabPanel">Gain queue</button>
+          <button class="tab" id="tab-method" data-tab="method" role="tab" aria-selected="false" aria-controls="tabPanel">Method</button>
+        </div>
+        <div class="tab-panel" id="tabPanel" role="tabpanel" aria-live="polite"></div>
+      </section>
+    </aside>
+  </main>
+
+  <dialog class="help-dialog" id="helpDialog">
+    <div class="dialog-top">
+      <span class="eyebrow">The method</span>
+      <form method="dialog"><button class="button button-icon" aria-label="Close help">×</button></form>
+    </div>
+    <h2>Fiduccia–Mattheyses partitioning</h2>
+    <p class="dialog-lede">FM is a classic move-based heuristic for splitting a hypergraph into two balanced blocks while cutting as few nets as possible.</p>
+    <div class="help-grid">
+      <section>
+        <h3>1 · Start balanced</h3>
+        <p>Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut.</p>
+      </section>
+      <section>
+        <h3>2 · Score every cell</h3>
+        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. FS counts nets where <em>v</em> is the only cell on its side, so moving it closes those nets. TE counts nets wholly on <em>v</em>'s side, so moving it opens a net.</p>
+      </section>
+      <section>
+        <h3>3 · Move the best cell</h3>
+        <p>Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking allows FM to climb out of local minima without immediately undoing a move.</p>
+      </section>
+      <section>
+        <h3>4 · Update the buckets</h3>
+        <p>Only gains of cells sharing a net with the moved cell can change. Their net counts are updated and their gains are recomputed, then the next best cell is selected.</p>
+      </section>
+      <section>
+        <h3>5 · Keep the best prefix</h3>
+        <p>Cumulative gain can go down. FM remembers the prefix of the pass with the lowest cut. At pass end it rolls back all later moves, unlocks every cell, and starts again only if the cut improved.</p>
+      </section>
+      <section>
+        <h3>6 · Read the board</h3>
+        <p>Coral nets cross the cut. The pulsing cell is the next pick. Green and red badges show positive and negative gain. Click a cell for FS, TE, lock state, and incident nets.</p>
+      </section>
+    </div>
+    <div class="dialog-footer">
+      <span>Step = one move (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
+      <form method="dialog"><button class="button button-primary">Got it</button></form>
+    </div>
+  </dialog>
+
+  <dialog class="help-dialog data-dialog" id="dataDialog">
+    <div class="dialog-top">
+      <span class="eyebrow">Graph input</span>
+      <form method="dialog"><button class="button button-icon" aria-label="Close graph data">×</button></form>
+    </div>
+    <h2>Hypergraph JSON</h2>
+    <p class="dialog-lede">Paste a graph, then apply it. Cells need unique IDs; each net is a list of two or more cell IDs. An <code>initialPartition</code> is optional.</p>
+    <div class="data-body">
+      <textarea id="graphJson" spellcheck="false" aria-label="Hypergraph JSON"></textarea>
+      <p class="data-error" id="dataError" role="alert"></p>
+      <p class="data-schema"><code>nodes: [{ id, label? }]</code> · <code>nets: [{ id?, cells: [id, …] }]</code></p>
+    </div>
+    <div class="dialog-footer">
+      <span>Two blocks are formed automatically. Larger graphs are supported, but the board is tuned for up to about 18 cells.</span>
+      <div class="data-actions">
+        <button class="button button-secondary" id="copyGraphBtn" type="button">Copy current</button>
+        <button class="button button-primary" id="applyGraphBtn" type="button">Apply graph</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/fm.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
