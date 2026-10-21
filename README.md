@@ -23,6 +23,12 @@ npm start
 
 No install or build step is required. The app is plain HTML, CSS, and JavaScript.
 
+## Languages
+
+The interface opens in **Vietnamese**. Use the **VI / EN** switch in the header to change languages at any time; the choice is stored in `localStorage`, and the current graph and run state are preserved. Add `?lang=en` or `?lang=vi` to the URL to force a language for a link.
+
+The Vietnamese copy follows the terminology in the course slides: **phân vùng**, **net then chốt**, **cell cơ sở**, **phân bố pin**, **lượt**, **trạng thái cắt**, **hoán đổi**, and **kích thước cắt**. Algorithm notation such as `FM`, `KL`, `FS`, `TE`, `D(v)`, `gain`, and block names `A`/`B` stays unchanged.
+
 ## What you can do
 
 - **Switch between KL and FM** with the segmented control in Run control. The app opens in KL mode; FM moves one cell per step, while KL swaps one cell from each block.
@@ -35,6 +41,7 @@ No install or build step is required. The app is plain HTML, CSS, and JavaScript
 - **Edit the graph directly on the board** with `Edit graph`: drag cells, double-click to rename, add cells, connect cells into a new net, change a cell's starting block, or delete a cell/net. `Clear` wipes the board, and undo restores it.
 - **Load or export hypergraph JSON** from the `Data` dialog. Seeded random netlists are generated with the `Random` button.
 - **Re-split start** with a balanced alternating start, or reset back to the original start with `Reset run`.
+- **Switch languages** between Vietnamese and English without resetting the graph. Preset names, descriptions, logs, queues, inspector copy, dialog text, and screen-reader labels all follow the selected language.
 
 Keyboard: `Space` play/pause, `S` step, `P` run pass, `R` reset.
 
@@ -150,9 +157,11 @@ css/styles.css      Visual design and responsive layout
 js/fm.js            FM engine, shared graph/partition utilities, critical classification
 js/kl.js            KL pair-swap engine reusing the FM partition surface
 js/presets.js       Example hypergraphs and seeded random netlist generator
+js/i18n.js          Vietnamese/English dictionary, interpolation, persistence, DOM translator
 js/app.js           GUI, animation, graph editor, logs, inspector, import/export
 tests/fm.test.js    FM and critical-net invariant tests
 tests/kl.test.js    KL pair-gain, pass, rollback, and compatibility tests
+tests/i18n.test.js  Localization coverage and slide-terminology tests
 ```
 
 ## Tests
@@ -174,6 +183,8 @@ The suite checks, among other properties:
 - KL pair gain matches `D(a)+D(b)−2c(a,b)` for two-terminal nets and the exact net-cut change for hypergraphs.
 - The slide's Example 2.1 is reconstructed exactly: initial cut `9`, `D = [1,1,2,1,1,2,1,1]`, gains `3, 5, −6, −2`, `G₂ = 8`, and best-prefix cut `1`.
 - KL preserves block sizes, locks swapped pairs, and rolls back to its best prefix.
+- Vietnamese is the default; every preset, static label, and direct dynamic key resolves, with no duplicate dictionary keys.
+- Slide terminology is present for `cell cơ sở`, `phân bố pin`, `net then chốt`, `lượt`, and `kích thước cắt`.
 
 ## Notes and limits
 

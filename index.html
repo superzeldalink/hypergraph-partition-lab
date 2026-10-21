@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Partition Lab · FM + KL</title>
+  <title data-i18n="Partition Lab · FM + KL">Partition Lab · FM + KL</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="app-header">
-    <a class="brand" href="#" aria-label="Partition Lab home">
+    <a class="brand" href="#" data-i18n-aria-label="Partition Lab home" aria-label="Partition Lab home">
       <span class="brand-mark" aria-hidden="true">
         <span class="brand-block brand-block-a">A</span>
         <span class="brand-cut"></span>
@@ -18,16 +18,20 @@
       </span>
       <span class="brand-copy">
         <span class="brand-title">Partition Lab</span>
-        <span class="brand-subtitle">Fiduccia–Mattheyses + Kernighan–Lin partitioning</span>
+        <span class="brand-subtitle" data-i18n="Fiduccia–Mattheyses + Kernighan–Lin partitioning">Fiduccia–Mattheyses + Kernighan–Lin partitioning</span>
       </span>
     </a>
 
     <div class="header-actions">
+      <div class="language-switch" role="group" aria-label="Language / Ngôn ngữ">
+        <button class="language-option is-active" type="button" data-language="vi" aria-pressed="true" title="Tiếng Việt">VI</button>
+        <button class="language-option" type="button" data-language="en" aria-pressed="false" title="English">EN</button>
+      </div>
       <label class="select-shell" for="presetSelect">
-        <span>Example</span>
-        <select id="presetSelect" aria-label="Choose an example hypergraph"></select>
+        <span data-i18n="Example">Example</span>
+        <select id="presetSelect" data-i18n-aria-label="Choose an example hypergraph" aria-label="Choose an example hypergraph"></select>
       </label>
-      <button class="button button-ghost button-random" id="randomBtn" type="button" title="Generate a seeded random netlist">
+      <button class="button button-ghost button-random" id="randomBtn" type="button" data-i18n-title="Generate a seeded random netlist" title="Generate a seeded random netlist">
         <svg viewBox="0 0 20 20" aria-hidden="true">
           <path d="M3 5.5h3.2c1.4 0 2.4.7 3.3 2l1 1.8c.8 1.3 1.8 2 3.2 2H17" />
           <path d="m14.5 9 2.5 2.3-2.5 2.3" />
@@ -35,30 +39,30 @@
           <path d="M11.7 6.4c.7-.6 1.5-.9 2.4-.9H17" />
           <path d="m14.5 3 2.5 2.4-2.5 2.4" />
         </svg>
-        <span>Random</span>
+        <span data-i18n="Random">Random</span>
       </button>
-      <button class="button button-ghost button-data" id="dataBtn" type="button" title="Import or export hypergraph JSON">
+      <button class="button button-ghost button-data" id="dataBtn" type="button" data-i18n-title="Import or export hypergraph JSON" title="Import or export hypergraph JSON">
         <span class="data-braces" aria-hidden="true">{ }</span>
-        <span>Data</span>
+        <span data-i18n="Data">Data</span>
       </button>
-      <button class="button button-icon" id="helpBtn" type="button" title="How FM and KL work" aria-label="How FM and KL work">
+      <button class="button button-icon" id="helpBtn" type="button" data-i18n-title="How FM and KL work" data-i18n-aria-label="How FM and KL work" title="How FM and KL work" aria-label="How FM and KL work">
         <span>?</span>
       </button>
     </div>
   </div>
 
   <main class="workspace">
-    <section class="board-card" aria-label="Partition visualization">
+    <section class="board-card" data-i18n-aria-label="Partition visualization" aria-label="Partition visualization">
       <header class="board-toolbar">
         <div class="title-group">
-          <span class="eyebrow">Partition board</span>
+          <span class="eyebrow" data-i18n="Partition board">Partition board</span>
           <div class="board-title-row">
             <h1 id="graphTitle">Signal hypergraph</h1>
             <span class="status-pill" id="statusPill">
               <span class="status-dot" aria-hidden="true"></span>
               <span id="statusText">Ready</span>
             </span>
-            <button class="button button-ghost button-edit" id="editBtn" type="button" aria-pressed="false" title="Edit this graph directly on the board">
+            <button class="button button-ghost button-edit" id="editBtn" type="button" aria-pressed="false" data-i18n-title="Edit this graph directly on the board" title="Edit this graph directly on the board">
               <svg viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M4 14.5V16h1.5L15 6.5 13.5 5 4 14.5Z" />
                 <path d="m12.5 6 1.5 1.5" />
@@ -70,65 +74,65 @@
           <p class="board-subtitle" id="graphMeta">12 cells · 15 nets · balanced start</p>
         </div>
         <div class="cut-readout">
-          <span class="cut-label">Cut nets</span>
+          <span class="cut-label" data-i18n="Cut nets">Cut nets</span>
           <div class="cut-number-row">
             <strong id="cutValue">12</strong>
             <span class="cut-delta" id="cutDelta">from 12</span>
           </div>
-          <span class="cut-critical" id="criticalSummary" title="Nets where moving one cell can change whether the net is cut.">
+          <span class="cut-critical" id="criticalSummary" data-i18n-title="Nets where moving one cell can change whether the net is cut." title="Nets where moving one cell can change whether the net is cut.">
             <span id="criticalCount">0 critical nets</span>
           </span>
           <span class="cut-critical-detail" id="criticalBreakdown">none</span>
         </div>
       </header>
 
-      <div class="balance-strip" aria-label="Block balance">
+      <div class="balance-strip" data-i18n-aria-label="Block balance" aria-label="Block balance">
         <div class="balance-labels">
-          <span class="block-label block-label-a"><i></i>Block A <b id="countA">6</b></span>
+          <span class="block-label block-label-a"><i></i><span data-i18n="Block A">Block A</span> <b id="countA">6</b></span>
           <span class="balance-cap" id="capNote">cap 7 / block</span>
-          <span class="block-label block-label-b"><b id="countB">6</b> Block B<i></i></span>
+          <span class="block-label block-label-b"><b id="countB">6</b> <span data-i18n="Block B">Block B</span><i></i></span>
         </div>
         <div class="balance-track" id="balanceTrack">
           <span class="balance-fill balance-fill-a" id="balanceA"></span>
           <span class="balance-fill balance-fill-b" id="balanceB"></span>
-          <span class="cap-marker cap-marker-left" id="capMarkerLeft" title="Maximum block size"></span>
-          <span class="cap-marker cap-marker-right" id="capMarkerRight" title="Maximum block size"></span>
+          <span class="cap-marker cap-marker-left" id="capMarkerLeft" data-i18n-title="Maximum block size" title="Maximum block size"></span>
+          <span class="cap-marker cap-marker-right" id="capMarkerRight" data-i18n-title="Maximum block size" title="Maximum block size"></span>
         </div>
       </div>
 
       <div class="board-stage" id="boardStage">
         <div class="editor-bar" id="editorBar" hidden>
-          <span class="editor-brand"><i aria-hidden="true"></i>Graph editor</span>
-          <div class="editor-tools" role="group" aria-label="Graph editing tools">
-            <button class="editor-tool is-active" type="button" data-tool="select" aria-pressed="true" title="Select and move cells (V)">
+          <span class="editor-brand"><i aria-hidden="true"></i><span data-i18n="Graph editor">Graph editor</span></span>
+          <div class="editor-tools" role="group" data-i18n-aria-label="Graph editing tools" aria-label="Graph editing tools">
+            <button class="editor-tool is-active" type="button" data-tool="select" aria-pressed="true" data-i18n-title="Select and move cells (V)" title="Select and move cells (V)">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 3 4.1 13 2-4.9L16 9.1 5 3Z" /></svg>
-              <span>Select</span>
+              <span data-i18n="Select">Select</span>
             </button>
-            <button class="editor-tool" type="button" data-tool="add" aria-pressed="false" title="Add a cell (N)">
+            <button class="editor-tool" type="button" data-tool="add" aria-pressed="false" data-i18n-title="Add a cell (N)" title="Add a cell (N)">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
-              <span>Add cell</span>
+              <span data-i18n="Add cell">Add cell</span>
             </button>
-            <button class="editor-tool" type="button" data-tool="connect" aria-pressed="false" title="Connect cells into a net (C)">
+            <button class="editor-tool" type="button" data-tool="connect" aria-pressed="false" data-i18n-title="Connect cells into a net (C)" title="Connect cells into a net (C)">
               <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="14.5" r="2.2" /><circle cx="15" cy="5.5" r="2.2" /><path d="m6.6 13 6.8-6" /></svg>
-              <span>Connect</span>
+              <span data-i18n="Connect">Connect</span>
             </button>
           </div>
           <span class="editor-tip" id="editorTip">Drag cells · double-click a name to rename</span>
           <div class="editor-actions">
-            <button class="button button-quiet editor-undo" id="undoEditBtn" type="button" disabled title="Undo graph edit (⌘Z)">Undo</button>
-            <button class="button button-quiet editor-clear" id="clearEditBtn" type="button" title="Remove every cell and net, then start fresh">Clear</button>
-            <button class="button button-quiet editor-delete" id="deleteEditBtn" type="button" disabled title="Delete selected cell or net">Delete</button>
-            <button class="button button-primary editor-done" id="doneEditBtn" type="button">Done</button>
+            <button class="button button-quiet editor-undo" id="undoEditBtn" type="button" disabled data-i18n-title="Undo graph edit (⌘Z)" title="Undo graph edit (⌘Z)"><span data-i18n="Undo">Undo</span></button>
+            <button class="button button-quiet editor-clear" id="clearEditBtn" type="button" data-i18n-title="Remove every cell and net, then start fresh" title="Remove every cell and net, then start fresh"><span data-i18n="Clear">Clear</span></button>
+            <button class="button button-quiet editor-delete" id="deleteEditBtn" type="button" disabled data-i18n-title="Delete selected cell or net" title="Delete selected cell or net"><span data-i18n="Delete">Delete</span></button>
+            <button class="button button-primary editor-done" id="doneEditBtn" type="button"><span data-i18n="Done">Done</span></button>
           </div>
         </div>
         <div class="connect-tray" id="connectTray" hidden>
           <span class="connect-tray-label" id="connectTrayLabel">Pick two or more cells</span>
           <span class="connect-chips" id="connectChips"></span>
-          <button class="button button-secondary connect-cancel" id="cancelConnectBtn" type="button">Cancel</button>
-          <button class="button button-primary connect-create" id="createNetBtn" type="button" disabled>Create net</button>
+          <button class="button button-secondary connect-cancel" id="cancelConnectBtn" type="button"><span data-i18n="Cancel">Cancel</span></button>
+          <button class="button button-primary connect-create" id="createNetBtn" type="button" disabled><span data-i18n="Create net">Create net</span></button>
         </div>
         <svg id="graphSvg" viewBox="0 0 1000 640" role="img" aria-labelledby="svgTitle svgDesc">
-          <title id="svgTitle">Hypergraph partition board</title>
+          <title id="svgTitle" data-i18n="Hypergraph partition board">Hypergraph partition board</title>
           <desc id="svgDesc">Cells appear in two blocks. Coral nets cross the cut; muted nets stay inside a block. Every net has a visible name: amber names are critical, steel-blue names are not. Select a cell to inspect it; in the editor, click a net line to inspect that net.</desc>
           <defs>
             <linearGradient id="blockAGradient" x1="0" y1="0" x2="1" y2="0">
@@ -155,11 +159,11 @@
           <rect id="blockBBg" x="500" y="0" width="500" height="640" fill="url(#blockBGradient)" />
           <line class="cut-line" id="cutLine" x1="500" y1="28" x2="500" y2="612" />
           <g class="block-headings" aria-hidden="true">
-            <text class="block-kicker block-kicker-a" id="blockAKicker" x="48" y="48">BLOCK A</text>
-            <text class="block-kicker block-kicker-b" id="blockBKicker" x="952" y="48" text-anchor="end">BLOCK B</text>
+            <text class="block-kicker block-kicker-a" id="blockAKicker" x="48" y="48" data-i18n="BLOCK A">BLOCK A</text>
+            <text class="block-kicker block-kicker-b" id="blockBKicker" x="952" y="48" text-anchor="end" data-i18n="BLOCK B">BLOCK B</text>
             <text class="block-count" id="blockACountLabel" x="48" y="72">6 cells</text>
             <text class="block-count" id="blockBCountLabel" x="952" y="72" text-anchor="end">6 cells</text>
-            <text class="cut-flag" id="cutFlag" x="500" y="38" text-anchor="middle">CUT</text>
+            <text class="cut-flag" id="cutFlag" x="500" y="38" text-anchor="middle" data-i18n="CUT">CUT</text>
           </g>
 
           <g id="edgesLayer" aria-hidden="true"></g>
@@ -170,48 +174,48 @@
       </div>
 
       <footer class="board-footer">
-        <div class="legend" aria-label="Legend">
-          <span><i class="legend-line legend-internal"></i>Internal net</span>
-          <span><i class="legend-line legend-cut"></i>Cut net</span>
-          <span><b class="legend-net-id">n3</b>Critical name</span>
-          <span><b class="legend-net-id is-normal">n1</b>Other name</span>
-          <span><i class="legend-node"></i>Unlocked cell</span>
-          <span><i class="legend-lock"></i>Locked</span>
+        <div class="legend" data-i18n-aria-label="Legend" aria-label="Legend">
+          <span><i class="legend-line legend-internal"></i><span data-i18n="Internal net">Internal net</span></span>
+          <span><i class="legend-line legend-cut"></i><span data-i18n="Cut net">Cut net</span></span>
+          <span><b class="legend-net-id">n3</b><span data-i18n="Critical name">Critical name</span></span>
+          <span><b class="legend-net-id is-normal">n1</b><span data-i18n="Other name">Other name</span></span>
+          <span><i class="legend-node"></i><span data-i18n="Unlocked cell">Unlocked cell</span></span>
+          <span><i class="legend-lock"></i><span data-i18n="Locked">Locked</span></span>
         </div>
-        <p class="next-step" id="nextStep">Press Step to open pass 1.</p>
+        <p class="next-step" id="nextStep" data-i18n="Press Step to open pass 1.">Press Step to open pass 1.</p>
       </footer>
 
-      <div class="phase-strip" id="phaseStrip" aria-label="Partitioning pass anatomy">
-        <div class="phase" data-phase="0"><span class="phase-index">01</span><span>Split</span></div>
+      <div class="phase-strip" id="phaseStrip" data-i18n-aria-label="Partitioning pass anatomy" aria-label="Partitioning pass anatomy">
+        <div class="phase" data-phase="0"><span class="phase-index">01</span><span data-i18n="Split">Split</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
-        <div class="phase" data-phase="1"><span class="phase-index">02</span><span>Gain buckets</span></div>
+        <div class="phase" data-phase="1"><span class="phase-index">02</span><span data-i18n="Gain buckets">Gain buckets</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
-        <div class="phase" data-phase="2"><span class="phase-index">03</span><span>Pick best</span></div>
+        <div class="phase" data-phase="2"><span class="phase-index">03</span><span data-i18n="Pick best">Pick best</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
-        <div class="phase" data-phase="3"><span class="phase-index">04</span><span>Move &amp; lock</span></div>
+        <div class="phase" data-phase="3"><span class="phase-index">04</span><span data-i18n="Move &amp; lock">Move &amp; lock</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
-        <div class="phase" data-phase="4"><span class="phase-index">05</span><span>Update gains</span></div>
+        <div class="phase" data-phase="4"><span class="phase-index">05</span><span data-i18n="Update gains">Update gains</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
-        <div class="phase" data-phase="5"><span class="phase-index">06</span><span>Best prefix</span></div>
+        <div class="phase" data-phase="5"><span class="phase-index">06</span><span data-i18n="Best prefix">Best prefix</span></div>
       </div>
     </section>
 
-    <aside class="sidebar" aria-label="Solver controls">
+    <aside class="sidebar" data-i18n-aria-label="Solver controls" aria-label="Solver controls">
       <section class="panel run-panel">
         <div class="panel-heading">
-          <span class="eyebrow">Run control</span>
+          <span class="eyebrow" data-i18n="Run control">Run control</span>
           <span class="key-hint">Space · S · P</span>
         </div>
-        <div class="algorithm-switch" role="group" aria-label="Partitioning algorithm">
+        <div class="algorithm-switch" role="group" data-i18n-aria-label="Partitioning algorithm" aria-label="Partitioning algorithm">
           <button class="algorithm-option is-active" id="algorithmKL" type="button"
-            data-algorithm="KL" aria-pressed="true" title="Kernighan–Lin: swap a pair and lock both">
+            data-algorithm="KL" aria-pressed="true" data-i18n-title="Kernighan–Lin: swap a pair and lock both" title="Kernighan–Lin: swap a pair and lock both">
             <span class="algorithm-code">KL</span>
-            <span class="algorithm-copy">pair swaps</span>
+            <span class="algorithm-copy" data-i18n="pair swaps">pair swaps</span>
           </button>
           <button class="algorithm-option" id="algorithmFM" type="button"
-            data-algorithm="FM" aria-pressed="false" title="Fiduccia–Mattheyses: move one cell and lock it">
+            data-algorithm="FM" aria-pressed="false" data-i18n-title="Fiduccia–Mattheyses: move one cell and lock it" title="Fiduccia–Mattheyses: move one cell and lock it">
             <span class="algorithm-code">FM</span>
-            <span class="algorithm-copy">cell moves</span>
+            <span class="algorithm-copy" data-i18n="cell moves">cell moves</span>
           </button>
         </div>
         <div class="transport">
@@ -222,53 +226,53 @@
           </button>
           <button class="button button-secondary" id="stepBtn" type="button">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 7 5-7 5V5Z" /><path d="M15 5v10" /></svg>
-            <span>Step</span>
+            <span data-i18n="Step">Step</span>
           </button>
           <button class="button button-secondary" id="passBtn" type="button">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h6M4 10h6M4 15h6" /><path d="m12 6 4 4-4 4" /></svg>
-            <span>Run pass</span>
+            <span data-i18n="Run pass">Run pass</span>
           </button>
         </div>
         <div class="secondary-actions">
           <button class="button button-quiet" id="resetBtn" type="button">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 9a6 6 0 1 1 1.3 4.7" /><path d="M4 4.5V9h4.5" /></svg>
-            Reset run
+            <span data-i18n="Reset run">Reset run</span>
           </button>
           <button class="button button-quiet" id="resplitBtn" type="button">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v4h4M4 8a7 7 0 0 1 12-2" /><path d="M16 16v-4h-4M16 12a7 7 0 0 1-12 2" /></svg>
-            Re-split start
+            <span data-i18n="Re-split start">Re-split start</span>
           </button>
         </div>
 
         <label class="slider-row" for="speedRange">
-          <span class="slider-label">Playback speed <output id="speedOut">1.0×</output></span>
+          <span class="slider-label"><span data-i18n="Playback speed">Playback speed</span> <output id="speedOut">1.0×</output></span>
           <input id="speedRange" type="range" min="0.5" max="3" value="1" step="0.5">
         </label>
         <label class="slider-row" for="slackRange">
-          <span class="slider-label"><span id="slackLabel">Balance slack</span> <output id="slackOut">+1 cell</output></span>
+          <span class="slider-label"><span id="slackLabel" data-i18n="Balance slack">Balance slack</span> <output id="slackOut">+1 cell</output></span>
           <input id="slackRange" type="range" min="0" max="3" value="1" step="1">
           <span class="slider-help" id="slackHelp">Each block may grow to 7 of 12 cells.</span>
         </label>
       </section>
 
-      <section class="metrics" aria-label="Solver metrics">
+      <section class="metrics" data-i18n-aria-label="Solver metrics" aria-label="Solver metrics">
         <div class="metric">
-          <span class="metric-label">Cut</span>
+          <span class="metric-label" data-i18n="Cut" data-i18n-title="Cut size" title="Cut size">Cut</span>
           <strong id="metricCut">12</strong>
           <span class="metric-foot" id="metricImprovement">start 12</span>
         </div>
         <div class="metric">
-          <span class="metric-label">Pass</span>
+          <span class="metric-label" data-i18n="Pass">Pass</span>
           <strong id="metricPass">0</strong>
           <span class="metric-foot" id="metricPassState">ready</span>
         </div>
         <div class="metric">
-          <span class="metric-label" id="metricMovesLabel">Kept moves</span>
+          <span class="metric-label" id="metricMovesLabel" data-i18n="Kept moves">Kept moves</span>
           <strong id="metricKept">0</strong>
           <span class="metric-foot" id="metricAttempted">0 attempted</span>
         </div>
         <div class="metric">
-          <span class="metric-label">Pass gain</span>
+          <span class="metric-label" data-i18n="Pass gain">Pass gain</span>
           <strong id="metricGain">0</strong>
           <span class="metric-foot" id="metricBestPrefix">best 12</span>
         </div>
@@ -276,22 +280,22 @@
 
       <section class="panel inspector-panel">
         <div class="panel-heading">
-          <span class="eyebrow">Cell inspector</span>
-          <span class="panel-hint" id="inspectorHint">click a cell</span>
+          <span class="eyebrow" id="inspectorLabel" data-i18n="Cell inspector">Cell inspector</span>
+          <span class="panel-hint" id="inspectorHint" data-i18n="click a cell">click a cell</span>
         </div>
         <div id="inspectorBody" class="inspector-body">
           <div class="empty-state">
             <span class="empty-glyph" aria-hidden="true">⌖</span>
-            <p>Select any cell to see its gain breakdown and incident nets.</p>
+            <p data-i18n="Select any cell to see its gain breakdown and incident nets.">Select any cell to see its gain breakdown and incident nets.</p>
           </div>
         </div>
       </section>
 
       <section class="panel detail-panel">
-        <div class="tabs" role="tablist" aria-label="Solver details">
-          <button class="tab is-active" id="tab-log" data-tab="log" role="tab" aria-selected="true" aria-controls="tabPanel">Move log</button>
-          <button class="tab" id="tab-gains" data-tab="gains" role="tab" aria-selected="false" aria-controls="tabPanel">Gain queue</button>
-          <button class="tab" id="tab-method" data-tab="method" role="tab" aria-selected="false" aria-controls="tabPanel">Method</button>
+        <div class="tabs" role="tablist" data-i18n-aria-label="Solver details" aria-label="Solver details">
+          <button class="tab is-active" id="tab-log" data-tab="log" role="tab" aria-selected="true" aria-controls="tabPanel" data-i18n="Move log">Move log</button>
+          <button class="tab" id="tab-gains" data-tab="gains" role="tab" aria-selected="false" aria-controls="tabPanel" data-i18n="Gain queue">Gain queue</button>
+          <button class="tab" id="tab-method" data-tab="method" role="tab" aria-selected="false" aria-controls="tabPanel" data-i18n="Method">Method</button>
         </div>
         <div class="tab-panel" id="tabPanel" role="tabpanel" aria-live="polite"></div>
       </section>
@@ -300,74 +304,75 @@
 
   <dialog class="help-dialog" id="helpDialog">
     <div class="dialog-top">
-      <span class="eyebrow">The method</span>
-      <form method="dialog"><button class="button button-icon" aria-label="Close help">×</button></form>
+      <span class="eyebrow" data-i18n="The method">The method</span>
+      <form method="dialog"><button class="button button-icon" data-i18n-aria-label="Close help" aria-label="Close help">×</button></form>
     </div>
-    <h2>FM and KL partitioning</h2>
-    <p class="dialog-lede">Both heuristics split a netlist into two blocks while cutting as few nets as possible. FM moves one cell at a time; KL swaps one cell from each block.</p>
+    <h2 data-i18n="FM and KL partitioning">FM and KL partitioning</h2>
+    <p class="dialog-lede" data-i18n="Both heuristics split a netlist into two blocks while cutting as few nets as possible. FM moves one cell at a time; KL swaps one cell from each block.">Both heuristics split a netlist into two blocks while cutting as few nets as possible. FM moves one cell at a time; KL swaps one cell from each block.</p>
     <div class="help-grid">
       <section>
-        <h3>1 · Start balanced</h3>
-        <p>Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut. KL swaps preserve the starting block sizes.</p>
+        <h3 data-i18n="1 · Start balanced">1 · Start balanced</h3>
+        <p data-i18n-html="Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut. KL swaps preserve the starting block sizes.">Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut. KL swaps preserve the starting block sizes.</p>
       </section>
       <section>
-        <h3>2 · Critical nets</h3>
-        <p>A net is <strong>critical</strong> when moving one of its cells can change whether the net is cut: <code>A=0</code>, <code>A=1</code>, <code>B=0</code>, or <code>B=1</code>. <em>Cut-critical</em> nets are cut with one cell on a side; moving that lone cell uncuts it (FS). <em>Uncut-critical</em> nets are internal; moving a cell cuts them (TE). A <code>2/2</code> cut net is not critical.</p>
+        <h3 data-i18n="2 · Critical nets">2 · Critical nets</h3>
+        <p data-i18n-html="A net is <strong>critical</strong> when moving one of its cells can change whether the net is cut: <code>A=0</code>, <code>A=1</code>, <code>B=0</code>, or <code>B=1</code>. <em>Cut-critical</em> nets are cut with one cell on a side; moving that lone cell uncuts it (FS). <em>Uncut-critical</em> nets are internal; moving a cell cuts them (TE). A <code>2/2</code> cut net is not critical.">A net is <strong>critical</strong> when moving one of its cells can change whether the net is cut: <code>A=0</code>, <code>A=1</code>, <code>B=0</code>, or <code>B=1</code>. <em>Cut-critical</em> nets are cut with one cell on a side; moving that lone cell uncuts it (FS). <em>Uncut-critical</em> nets are internal; moving a cell cuts them (TE). A <code>2/2</code> cut net is not critical.</p>
       </section>
       <section>
-        <h3>3 · FM: move the best cell</h3>
-        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking lets FM climb out of local minima without immediately undoing a move.</p>
+        <h3 data-i18n="3 · FM: move the best cell">3 · FM: move the best cell</h3>
+        <p data-i18n-html="For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking lets FM climb out of local minima without immediately undoing a move.">For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking lets FM climb out of local minima without immediately undoing a move.</p>
       </section>
       <section>
-        <h3>4 · KL: swap the best pair</h3>
-        <p>For a free cell <em>v</em>, <code>D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</code>. Pick a free pair with the largest <code>g(a,b) = D(a) + D(b) − 2c(a,b)</code>, swap both cells, and <strong>lock both</strong>. On this hypergraph board, the pair gain is the exact net-cut change; for two-terminal nets it equals the slide formula.</p>
+        <h3 data-i18n="4 · KL: swap the best pair">4 · KL: swap the best pair</h3>
+        <p data-i18n-html="For a free cell <em>v</em>, <code>D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</code>. Pick a free pair with the largest <code>g(a,b) = D(a) + D(b) − 2c(a,b)</code>, swap both cells, and <strong>lock both</strong>. On this hypergraph board, the pair gain is the exact net-cut change; for two-terminal nets it equals the slide formula.">For a free cell <em>v</em>, <code>D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</code>. Pick a free pair with the largest <code>g(a,b) = D(a) + D(b) − 2c(a,b)</code>, swap both cells, and <strong>lock both</strong>. On this hypergraph board, the pair gain is the exact net-cut change; for two-terminal nets it equals the slide formula.</p>
       </section>
       <section>
-        <h3>5 · Update and keep the best prefix</h3>
-        <p>Only cells incident to a changed net need updated scores. Record the prefix with the lowest cut. At pass end, roll back later moves/swaps, unlock every cell, and start another pass only if the cut improved. Stop when a pass has no improvement.</p>
+        <h3 data-i18n="5 · Update and keep the best prefix">5 · Update and keep the best prefix</h3>
+        <p data-i18n="Only cells incident to a changed net need updated scores. Record the prefix with the lowest cut. At pass end, roll back later moves/swaps, unlock every cell, and start another pass only if the cut improved. Stop when a pass has no improvement.">Only cells incident to a changed net need updated scores. Record the prefix with the lowest cut. At pass end, roll back later moves/swaps, unlock every cell, and start another pass only if the cut improved. Stop when a pass has no improvement.</p>
       </section>
       <section>
-        <h3>6 · Read the board</h3>
-        <p>Coral lines cross the cut; muted lines stay inside a block. <strong>Every net name is visible.</strong> Amber names are critical (cut-critical or uncut-critical); steel-blue names are noncritical. Select a cell for its incident-net A/B counts and the exact reason; in the editor, click a net line to inspect it directly. The pulsing cell(s) show the next FM move or KL pair. Green and red badges show gain or <code>D(v)</code>.</p>
+        <h3 data-i18n="6 · Read the board">6 · Read the board</h3>
+        <p data-i18n-html="Coral lines cross the cut; muted lines stay inside a block. <strong>Every net name is visible.</strong> Amber names are critical (cut-critical or uncut-critical); steel-blue names are noncritical. Select a cell for its incident-net A/B counts and the exact reason; in the editor, click a net line to inspect it directly. The pulsing cell(s) show the next FM move or KL pair. Green and red badges show gain or <code>D(v)</code>.">Coral lines cross the cut; muted lines stay inside a block. <strong>Every net name is visible.</strong> Amber names are critical (cut-critical or uncut-critical); steel-blue names are noncritical. Select a cell for its incident-net A/B counts and the exact reason; in the editor, click a net line to inspect it directly. The pulsing cell(s) show the next FM move or KL pair. Green and red badges show gain or <code>D(v)</code>.</p>
       </section>
       <section>
-        <h3>7 · Switch algorithms</h3>
-        <p>Use the <strong>KL</strong> / <strong>FM</strong> switch in Run control. FM is the move-based hypergraph solver; KL is the pair-swap graph algorithm applied to the same nets. The cut readout is the same unit-cost net cut for both, and the graph, editor, balance strip, and critical-net inspector are shared.</p>
+        <h3 data-i18n="7 · Switch algorithms">7 · Switch algorithms</h3>
+        <p data-i18n-html="Use the <strong>KL</strong> / <strong>FM</strong> switch in Run control. FM is the move-based hypergraph solver; KL is the pair-swap graph algorithm applied to the same nets. The cut readout is the same unit-cost net cut for both, and the graph, editor, balance strip, and critical-net inspector are shared.">Use the <strong>KL</strong> / <strong>FM</strong> switch in Run control. FM is the move-based hypergraph solver; KL is the pair-swap graph algorithm applied to the same nets. The cut readout is the same unit-cost net cut for both, and the graph, editor, balance strip, and critical-net inspector are shared.</p>
       </section>
       <section>
-        <h3>8 · Edit the graph</h3>
-        <p><strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build nets. Pick two or more cells, then press <kbd>Enter</kbd> or click <em>Create net</em>. Connect stays active so you can build the next net; press <kbd>Esc</kbd> when finished. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it.</p>
+        <h3 data-i18n="8 · Edit the graph">8 · Edit the graph</h3>
+        <p data-i18n-html="<strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build nets. Pick two or more cells, then press <kbd>Enter</kbd> or click <em>Create net</em>. Connect stays active so you can build the next net; press <kbd>Esc</kbd> when finished. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it."><strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build nets. Pick two or more cells, then press <kbd>Enter</kbd> or click <em>Create net</em>. Connect stays active so you can build the next net; press <kbd>Esc</kbd> when finished. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it.</p>
       </section>
     </div>
     <div class="dialog-footer">
-      <span>Step = one FM move / KL swap (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
-      <form method="dialog"><button class="button button-primary">Got it</button></form>
+      <span data-i18n="Step = one FM move / KL swap (or one pass boundary). Run pass = finish this pass. Play = run to convergence.">Step = one FM move / KL swap (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
+      <form method="dialog"><button class="button button-primary" data-i18n="Got it">Got it</button></form>
     </div>
   </dialog>
 
   <dialog class="help-dialog data-dialog" id="dataDialog">
     <div class="dialog-top">
-      <span class="eyebrow">Graph input</span>
-      <form method="dialog"><button class="button button-icon" aria-label="Close graph data">×</button></form>
+      <span class="eyebrow" data-i18n="Graph input">Graph input</span>
+      <form method="dialog"><button class="button button-icon" data-i18n-aria-label="Close graph data" aria-label="Close graph data">×</button></form>
     </div>
-    <h2>Hypergraph JSON</h2>
-    <p class="dialog-lede">JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. You can also supply <code>edges</code> as two-item arrays or <code>{ source, target }</code> objects; edge weights must be 1. An <code>initialPartition</code> is optional.</p>
+    <h2 data-i18n="Hypergraph JSON">Hypergraph JSON</h2>
+    <p class="dialog-lede" data-i18n-html="JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. You can also supply <code>edges</code> as two-item arrays or <code>{ source, target }</code> objects; edge weights must be 1. An <code>initialPartition</code> is optional.">JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. You can also supply <code>edges</code> as two-item arrays or <code>{ source, target }</code> objects; edge weights must be 1. An <code>initialPartition</code> is optional.</p>
     <div class="data-body">
-      <textarea id="graphJson" spellcheck="false" aria-label="Hypergraph JSON"></textarea>
+      <textarea id="graphJson" spellcheck="false" data-i18n-aria-label="Hypergraph JSON" aria-label="Hypergraph JSON"></textarea>
       <p class="data-error" id="dataError" role="alert"></p>
       <p class="data-schema"><code>nodes: [{ id, label? }]</code> · <code>nets: [{ id?, cells: [id, …] }]</code> · <code>edges: [{ source, target }]</code></p>
     </div>
     <div class="dialog-footer">
-      <span>Two blocks are formed automatically. Larger graphs are supported, but the board is tuned for up to about 18 cells.</span>
+      <span data-i18n="Two blocks are formed automatically. Larger graphs are supported, but the board is tuned for up to about 18 cells.">Two blocks are formed automatically. Larger graphs are supported, but the board is tuned for up to about 18 cells.</span>
       <div class="data-actions">
-        <button class="button button-secondary" id="copyGraphBtn" type="button">Copy current</button>
-        <button class="button button-primary" id="applyGraphBtn" type="button">Apply graph</button>
+        <button class="button button-secondary" id="copyGraphBtn" type="button" data-i18n="Copy current">Copy current</button>
+        <button class="button button-primary" id="applyGraphBtn" type="button" data-i18n="Apply graph">Apply graph</button>
       </div>
     </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="js/i18n.js"></script>
   <script src="js/fm.js"></script>
   <script src="js/kl.js"></script>
   <script src="js/presets.js"></script>

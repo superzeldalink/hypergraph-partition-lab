@@ -10,6 +10,7 @@
   } = window.FMCore;
   const { KLEngine } = window.KLCore;
   const { PRESETS, getPreset, makeRandomGraph, mulberry32, randomSeed } = window.FMPresets;
+  const { t, setLanguage, getLanguage, applyTranslations } = window.I18N;
 
   const SVG_NS = "http://www.w3.org/2000/svg";
   const SELECTED_TAB = "log";
@@ -25,6 +26,7 @@
     helpBtn: document.getElementById("helpBtn"),
     helpDialog: document.getElementById("helpDialog"),
     dataDialog: document.getElementById("dataDialog"),
+    languageOptions: Array.from(document.querySelectorAll(".language-option")),
     graphJson: document.getElementById("graphJson"),
     dataError: document.getElementById("dataError"),
     applyGraphBtn: document.getElementById("applyGraphBtn"),
@@ -99,6 +101,7 @@
     metricAttempted: document.getElementById("metricAttempted"),
     metricGain: document.getElementById("metricGain"),
     metricBestPrefix: document.getElementById("metricBestPrefix"),
+    inspectorLabel: document.getElementById("inspectorLabel"),
     inspectorHint: document.getElementById("inspectorHint"),
     inspectorBody: document.getElementById("inspectorBody"),
     tabPanel: document.getElementById("tabPanel"),
@@ -167,7 +170,7 @@
   }
 
   function blockWord(side) {
-    return side === 0 ? "Block A" : "Block B";
+    return side === 0 ? t("Block A") : t("Block B");
   }
 
   function netDisplayName(net) {
@@ -177,6 +180,42 @@
   function boardNetName(net) {
     const name = netDisplayName(net);
     return name.length > 15 ? `${name.slice(0, 14)}…` : name;
+  }
+
+  function graphDisplayName(graph) {
+    const name = String(graph.name || "");
+    if (name.startsWith("Random netlist #") && state.currentSeed) {
+      return t("Random netlist #{seed}", { seed: state.currentSeed });
+    }
+    return name ? t(name) : t("Untitled hypergraph");
+  }
+
+  function graphDisplayDescription(graph) {
+    const text = String(graph.description || "");
+    const random = text.match(
+      /^(\d+) cells, (\d+) two-terminal nets and (\d+) hypernets\. Generated from seed (\d+)\.$/,
+    );
+    if (random) {
+      return t(
+        "{cells} cells, {edges} two-terminal nets and {hyper} hypernets. Generated from seed {seed}.",
+        {
+          cells: random[1],
+          edges: random[2],
+          hyper: random[3],
+          seed: random[4],
+        },
+      );
+    }
+    const imported = text.match(
+      /^Imported hypergraph with (\d+) cells and (\d+) nets\.$/,
+    );
+    if (imported) {
+      return t("Imported hypergraph with {cells} cells and {nets} nets.", {
+        cells: imported[1],
+        nets: imported[2],
+      });
+    }
+    return text ? t(text) : "";
   }
 
   function svgElement(tag, attributes = {}) {
@@ -201,37 +240,55 @@
   }
 
   function queueLabel(details) {
-    if (details.algorithm === "KL") return details.locked ? "fixed" : "free";
-    return details.locked ? "locked" : "unlocked";
+    if (details.algorithm === "KL") return t(details.locked ? "fixed" : "free");
+    return t(details.locked ? "locked" : "unlocked");
   }
 
   function netStateBadge(net) {
-    const countsText = `A ${net.counts[0]} · B ${net.counts[1]}.`;
+    const countsText = t("A {a} · B {b}.", {
+      a: net.counts[0],
+      b: net.counts[1],
+    });
     const criticalSides = [0, 1]
       .filter((side) => net.criticalSides && net.criticalSides[side])
       .map(blockName);
-    let state = "internal";
+    let state = t("internal");
     let classes = "net-state";
-    let detail = `${countsText} Internal net; no single-cell move changes its cut status.`;
+    let detail = `${countsText} ${t(
+      "Internal net; no single-cell move changes its cut status.",
+    )}`;
 
     if (net.criticalType === "cut") {
-      state = "close";
+      state = t("close");
       classes += " is-critical is-cut-critical";
       detail =
         criticalSides.length > 1
-          ? `${countsText} Cut-critical: both blocks hold one cell; moving either one closes the net (FS).`
-          : `${countsText} Cut-critical: the lone Block ${criticalSides[0]} cell can close the net by moving (FS).`;
-      if (net.criticalForCell) detail += " This cell is that lone cell.";
-      else detail += " This cell is not the lone cell.";
+          ? `${countsText} ${t(
+              "Cut-critical: both blocks hold one cell; moving either one closes the net (FS).",
+            )}`
+          : `${countsText} ${t(
+              "Cut-critical: the lone Block {block} cell can close the net by moving (FS).",
+              { block: criticalSides[0] },
+            )}`;
+      detail += ` ${t(
+        net.criticalForCell
+          ? "This cell is that lone cell."
+          : "This cell is not the lone cell.",
+      )}`;
     } else if (net.criticalType === "uncut") {
-      state = "open";
+      state = t("open");
       classes += " is-critical is-uncut-critical";
-      detail = `${countsText} Uncut-critical: moving a cell in Block ${criticalSides[0]} across cuts the net (TE).`;
-      if (net.criticalForCell) detail += " This cell can open it.";
+      detail = `${countsText} ${t(
+        "Uncut-critical: moving a cell in Block {block} across cuts the net (TE).",
+        { block: criticalSides[0] },
+      )}`;
+      if (net.criticalForCell) detail += ` ${t("This cell can open it.")}`;
     } else if (net.cut) {
-      state = "cut";
+      state = t("cut");
       classes += " is-cut";
-      detail = `${countsText} Cut, but no single-cell move changes its status.`;
+      detail = `${countsText} ${t(
+        "Cut, but no single-cell move changes its status.",
+      )}`;
     }
 
     return `<span class="${classes}" title="${escapeHtml(
@@ -336,7 +393,7 @@
     }
     buildScene();
     renderAll({ animate: false });
-    showToast("Undid graph edit");
+    showToast(t("Undid graph edit"));
   }
 
   function updateGraphSource() {
@@ -392,22 +449,24 @@
   /* ------------------------------------------------------------------ */
 
   function populatePresetSelect() {
+    const selected = el.presetSelect.value || state.presetId || PRESETS[0].id;
     const fragment = document.createDocumentFragment();
     PRESETS.forEach((preset) => {
       const option = document.createElement("option");
       option.value = preset.id;
-      option.textContent = preset.title;
+      option.textContent = t(preset.title);
       fragment.appendChild(option);
     });
     const randomOption = document.createElement("option");
     randomOption.value = "random";
-    randomOption.textContent = "Random netlist";
+    randomOption.textContent = t("Random netlist");
     fragment.appendChild(randomOption);
     const customOption = document.createElement("option");
     customOption.value = "custom";
-    customOption.textContent = "Custom graph";
+    customOption.textContent = t("Custom graph");
     fragment.appendChild(customOption);
-    el.presetSelect.appendChild(fragment);
+    el.presetSelect.replaceChildren(fragment);
+    el.presetSelect.value = selected;
   }
 
   function loadPreset(id) {
@@ -424,7 +483,7 @@
     state.currentSeed = generated.seed;
     el.presetSelect.value = "random";
     loadGraph(generated.graph);
-    showToast(`Generated random netlist #${generated.seed}`);
+    showToast(t("Generated random netlist #{seed}", { seed: generated.seed }));
   }
 
   function loadGraph(graph) {
@@ -461,7 +520,7 @@
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: false });
-    showToast("Balanced start re-split");
+    showToast(t("Balanced start re-split"));
   }
 
   /* ------------------------------------------------------------------ */
@@ -515,20 +574,22 @@
     try {
       parsed = JSON.parse(el.graphJson.value);
     } catch (error) {
-      el.dataError.textContent = `JSON error: ${error.message}`;
+      el.dataError.textContent = t("JSON error: {message}", {
+        message: error.message,
+      });
       return;
     }
 
     try {
       if (!parsed || !Array.isArray(parsed.nodes) || parsed.nodes.length === 0) {
-        throw new Error("The graph needs a non-empty nodes array.");
+        throw new Error(t("The graph needs a non-empty nodes array."));
       }
       if (!Array.isArray(parsed.nets) && !Array.isArray(parsed.edges)) {
-        throw new Error("The graph needs a nets or edges array.");
+        throw new Error(t("The graph needs a nets or edges array."));
       }
       const temp = createEngine(parsed);
       if (temp.nets.length === 0) {
-        throw new Error("Add at least one net with two or more valid cell IDs.");
+        throw new Error(t("Add at least one net with two or more valid cell IDs."));
       }
 
       const imported = {
@@ -554,9 +615,15 @@
       el.presetSelect.value = "custom";
       el.dataDialog.close();
       loadGraph(imported);
-      showToast(`Loaded ${imported.nodes.length} cells · ${imported.nets.length} nets`);
+      showToast(
+        t("Loaded {cells} cells · {nets} nets", {
+          cells: imported.nodes.length,
+          nets: imported.nets.length,
+        }),
+      );
     } catch (error) {
-      el.dataError.textContent = error.message || "Could not load this graph.";
+      el.dataError.textContent =
+        error.message || t("Could not load this graph.");
     }
   }
 
@@ -564,15 +631,15 @@
     const text = serializeGraph();
     try {
       await navigator.clipboard.writeText(text);
-      showToast("Copied graph JSON");
+      showToast(t("Copied graph JSON"));
     } catch (error) {
       el.graphJson.focus();
       el.graphJson.select();
       try {
         document.execCommand("copy");
-        showToast("Copied graph JSON");
+        showToast(t("Copied graph JSON"));
       } catch (copyError) {
-        showToast("Clipboard access was blocked");
+        showToast(t("Clipboard access was blocked"));
       }
     }
   }
@@ -1043,16 +1110,18 @@
       const criticalSides = [0, 1]
         .filter((side) => criticalSidesForCounts(counts)[side])
         .map(blockName);
-      let stateLabel = "internal";
+      let stateLabel = t("internal");
       if (info.cutCritical) {
         stateLabel =
           counts[0] === 1 && counts[1] === 1
-            ? "cut-critical in both blocks"
-            : `cut-critical in Block ${criticalSides[0]}`;
+            ? t("cut-critical in both blocks")
+            : t("cut-critical in Block {block}", { block: criticalSides[0] });
       } else if (info.uncutCritical) {
-        stateLabel = `uncut-critical in Block ${criticalSides[0]}`;
+        stateLabel = t("uncut-critical in Block {block}", {
+          block: criticalSides[0],
+        });
       } else if (cut) {
-        stateLabel = "cut, not critical";
+        stateLabel = t("cut, not critical");
       }
 
       edge.group.classList.toggle("is-critical-net", critical);
@@ -1294,9 +1363,9 @@
     el.editBtn.classList.toggle("is-active", editing);
     el.editBtn.setAttribute("aria-pressed", editing ? "true" : "false");
     el.editBtn.title = editing
-      ? "Finish editing and return to the solver"
-      : "Edit this graph directly on the board";
-    el.editBtnLabel.textContent = editing ? "Done editing" : "Edit graph";
+      ? t("Finish editing and return to the solver")
+      : t("Edit this graph directly on the board");
+    el.editBtnLabel.textContent = editing ? t("Done editing") : t("Edit graph");
     el.editorBar.hidden = !editing;
     el.graphSvg.classList.toggle("is-editing", editing);
     el.graphSvg.classList.toggle("tool-select", editing && state.tool === "select");
@@ -1310,9 +1379,9 @@
     });
 
     const tips = {
-      select: "Drag cells · double-click a name to rename · drag across the cut to change start block",
-      add: "Click empty canvas to drop a new cell · press V to select",
-      connect: "Click cells in order · Enter creates the net and keeps Connect active · Esc to finish",
+      select: t("Drag cells · double-click a name to rename · drag across the cut to change start block"),
+      add: t("Click empty canvas to drop a new cell · press V to select"),
+      connect: t("Click cells in order · Enter creates the net and keeps Connect active · Esc to finish"),
     };
     el.editorTip.textContent = tips[state.tool] || tips.select;
 
@@ -1337,8 +1406,8 @@
       el.connectChips.innerHTML = chips.join("");
       el.connectTrayLabel.textContent =
         state.connectIds.length === 0
-          ? "Pick two or more cells"
-          : `${state.connectIds.length} selected`;
+          ? t("Pick two or more cells")
+          : t("{n} selected", { n: state.connectIds.length });
       el.createNetBtn.disabled = state.connectIds.length < 2;
     }
   }
@@ -1361,9 +1430,9 @@
     drawEdges();
     if (changed && !silent) {
       const messages = {
-        select: "Select tool · drag cells to move them",
-        add: "Add tool · click the board to place a cell",
-        connect: "Connect tool · click two or more cells",
+        select: t("Select tool · drag cells to move them"),
+        add: t("Add tool · click the board to place a cell"),
+        connect: t("Connect tool · click two or more cells"),
       };
       showToast(messages[tool]);
     }
@@ -1389,13 +1458,13 @@
     state.connectIds = [];
     state.connectPointer = null;
     setTool("select", { silent: true });
-    showToast("Connection cancelled");
+    showToast(t("Connection cancelled"));
   }
 
   function createNetFromSelection() {
     if (!state.editing) return;
     if (state.connectIds.length < 2) {
-      showToast("Pick at least two cells to create a net");
+      showToast(t("Pick at least two cells to create a net"));
       return;
     }
     const cells = state.connectIds.slice();
@@ -1405,7 +1474,9 @@
       return net.cells.map(String).slice().sort().join("|") === key;
     });
     if (duplicate) {
-      showToast(`Those cells are already connected by ${duplicate.id}`);
+      showToast(
+        t("Those cells are already connected by {net}", { net: duplicate.id }),
+      );
       return;
     }
     pushUndo();
@@ -1417,7 +1488,12 @@
     state.connectPointer = null;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Created net ${id} · ${cells.length} cells · still connecting`);
+    showToast(
+      t("Created net {net} · {cells} cells · still connecting", {
+        net: id,
+        cells: cells.length,
+      }),
+    );
   }
 
   function enterEditMode() {
@@ -1435,13 +1511,17 @@
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: true });
-    showToast(`Graph editor on · changes restart the ${state.algorithm} run`);
+    showToast(
+      t("Graph editor on · changes restart the {algorithm} run", {
+        algorithm: state.algorithm,
+      }),
+    );
   }
 
   function exitEditMode() {
     if (!state.editing) return;
     if (!state.engine || state.engine.nodes.length < 2) {
-      showToast("Add at least two cells before finishing");
+      showToast(t("Add at least two cells before finishing"));
       return;
     }
     finishInlineRename(true);
@@ -1455,7 +1535,11 @@
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: true });
-    showToast(`Editor closed · ${state.algorithm} run reset`);
+    showToast(
+      t("Editor closed · {algorithm} run reset", {
+        algorithm: state.algorithm,
+      }),
+    );
   }
 
   function addCellAt(x, y) {
@@ -1484,7 +1568,12 @@
     state.selectedNetId = null;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Added cell ${label} in Block ${blockName(side)}`);
+    showToast(
+      t("Added cell {label} in Block {block}", {
+        label,
+        block: blockName(side),
+      }),
+    );
   }
 
   function renameNode(id, nextLabel) {
@@ -1493,7 +1582,7 @@
     if (!node) return false;
     const label = String(nextLabel).trim().slice(0, 32);
     if (!label) {
-      showToast("A cell name cannot be empty");
+      showToast(t("A cell name cannot be empty"));
       return false;
     }
     if (label === node.label) return false;
@@ -1501,7 +1590,7 @@
     node.label = label;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Renamed cell to ${label}`);
+    showToast(t("Renamed cell to {label}", { label }));
     return true;
   }
 
@@ -1511,7 +1600,7 @@
     if (!net) return false;
     const label = String(nextLabel).trim().slice(0, 32);
     if (!label) {
-      showToast("A net name cannot be empty");
+      showToast(t("A net name cannot be empty"));
       return false;
     }
     if (label === (net.label ?? net.id)) return false;
@@ -1519,7 +1608,7 @@
     net.label = label;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Renamed net to ${label}`);
+    showToast(t("Renamed net to {label}", { label }));
     return true;
   }
 
@@ -1530,7 +1619,7 @@
     if (current === undefined || current === side) return;
     const sourceCount = Array.from(map.values()).filter((item) => item === current).length;
     if (sourceCount <= 1) {
-      showToast("Each block needs at least one cell");
+      showToast(t("Each block needs at least one cell"));
       return;
     }
     pushUndo();
@@ -1540,7 +1629,7 @@
     state.selectedNetId = null;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Start block changed to ${blockName(side)}`);
+    showToast(t("Start block changed to {block}", { block: blockName(side) }));
   }
 
   function deleteNodeById(id) {
@@ -1571,8 +1660,13 @@
     syncEngineFromGraph({ preserveSelection: false });
     showToast(
       removedNets
-        ? `Deleted cell · removed ${removedNets} collapsed ${removedNets === 1 ? "net" : "nets"}`
-        : "Deleted cell",
+        ? t(
+            removedNets === 1
+              ? "Deleted cell · removed {n} collapsed net"
+              : "Deleted cell · removed {n} collapsed nets",
+            { n: removedNets },
+          )
+        : t("Deleted cell"),
     );
   }
 
@@ -1587,7 +1681,7 @@
     state.selectedNetId = null;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Deleted net ${net.id}`);
+    showToast(t("Deleted net {net}", { net: net.id }));
   }
 
   function deleteSelectedGraphItem() {
@@ -1615,7 +1709,7 @@
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: false });
     updateEditorUI();
-    showToast("Canvas cleared · click to add cells · Undo to restore");
+    showToast(t("Canvas cleared · click to add cells · Undo to restore"));
   }
 
   function startInlineRename(id) {
@@ -1641,7 +1735,7 @@
     input.type = "text";
     input.maxLength = 32;
     input.value = node.label;
-    input.setAttribute("aria-label", `Rename cell ${node.label}`);
+    input.setAttribute("aria-label", t("Rename cell {label}", { label: node.label }));
     input.style.left = `${bodyRect.left - stageRect.left + bodyRect.width / 2}px`;
     input.style.top = `${bodyRect.top - stageRect.top + bodyRect.height / 2}px`;
     const session = { id: String(id), input, closed: false };
@@ -1781,7 +1875,7 @@
       ).length;
       if (sourceCount < 1) {
         nextSide = node.side;
-        showToast("Each block needs at least one cell");
+        showToast(t("Each block needs at least one cell"));
       } else {
         map.set(String(id), nextSide);
         stashInitialSides(map);
@@ -1807,7 +1901,12 @@
         state.selectedId = id;
         state.selectedNetId = null;
         syncEngineFromGraph({ preserveSelection: true });
-        showToast(`Cell ${node.label} now starts in Block ${blockName(nextSide)}`);
+        showToast(
+          t("Cell {label} now starts in Block {block}", {
+            label: node.label,
+            block: blockName(nextSide),
+          }),
+        );
         return;
       }
     }
@@ -1858,30 +1957,51 @@
     updateAlgorithmUI();
     updateEditorUI();
 
+    const renderMetricsSnapshot = state.engine.getMetrics();
     el.svgDesc.textContent = state.editing
-      ? `Graph editor with ${state.engine.nodes.length} cells and ${state.engine.nets.length} nets. Drag cells, add or connect cells, or rename a cell.`
-      : `Partition with ${state.engine.blockSizes[0]} cells in block A and ${
-          state.engine.blockSizes[1]
-        } in block B. ${state.engine.cut} nets cross the cut. ${
-          state.engine.getMetrics().criticalNets
-        } nets are critical: ${
-          state.engine.getMetrics().cutCriticalNets
-        } cut-critical and ${
-          state.engine.getMetrics().uncutCriticalNets
-        } uncut-critical. Critical net names are amber; other net names are steel blue.`;
+      ? t(
+          "Graph editor with {cells} cells and {nets} nets. Drag cells, add or connect cells, or rename a cell.",
+          {
+            cells: state.engine.nodes.length,
+            nets: state.engine.nets.length,
+          },
+        )
+      : t(
+          "Partition with {a} cells in block A and {b} in block B. {cut} nets cross the cut. {critical} nets are critical: {cutCritical} cut-critical and {uncutCritical} uncut-critical. Critical net names are amber; other net names are steel blue.",
+          {
+            a: state.engine.blockSizes[0],
+            b: state.engine.blockSizes[1],
+            cut: state.engine.cut,
+            critical: renderMetricsSnapshot.criticalNets,
+            cutCritical: renderMetricsSnapshot.cutCriticalNets,
+            uncutCritical: renderMetricsSnapshot.uncutCriticalNets,
+          },
+        );
   }
 
   function renderGraphHeader() {
     const graph = state.graph;
     const metrics = state.engine.getMetrics();
-    el.graphTitle.textContent = graph.name || "Untitled hypergraph";
-    el.graphTitle.title = graph.description || "";
-    const seedText = state.currentSeed ? ` · seed ${state.currentSeed}` : "";
+    el.graphTitle.textContent = graphDisplayName(graph);
+    el.graphTitle.title = graphDisplayDescription(graph);
+    const seedText = state.currentSeed
+      ? ` ${t("· seed {seed}", { seed: state.currentSeed })}`
+      : "";
     const balanceText =
       metrics.algorithm === "KL"
-        ? ` · fixed ${metrics.blockSizes[0]}/${metrics.blockSizes[1]}`
-        : ` · cap ${metrics.maxSize}`;
-    el.graphMeta.textContent = `${graph.nodes.length} cells · ${graph.nets.length} nets${balanceText}${seedText}`;
+        ? t(" · fixed {a}/{b}", {
+            a: metrics.blockSizes[0],
+            b: metrics.blockSizes[1],
+          })
+        : t(" · cap {max}", { max: metrics.maxSize });
+    const cellsText = t(
+      graph.nodes.length === 1 ? "{n} cell" : "{n} cells",
+      { n: graph.nodes.length },
+    );
+    const netsText = t(graph.nets.length === 1 ? "{n} net" : "{n} nets", {
+      n: graph.nets.length,
+    });
+    el.graphMeta.textContent = `${cellsText} · ${netsText}${balanceText}${seedText}`;
   }
 
   function renderSceneState() {
@@ -1926,31 +2046,48 @@
         engine.algorithm === "KL" ? `D${signed(node.gain)}` : signed(node.gain);
 
       const scoreName = engine.algorithm === "KL" ? "D" : "gain";
-      const lockedName =
+      const lockedName = t(
         engine.algorithm === "KL"
           ? node.locked
             ? "fixed"
             : "free"
           : node.locked
             ? "locked"
-            : "unlocked";
+            : "unlocked",
+      );
       entry.group.setAttribute(
         "aria-label",
         state.editing
-          ? `Cell ${node.label}, starts in ${blockWord(node.side)}. Drag to move, double-click to rename.`
-          : `Cell ${node.label}, ${blockWord(node.side)}, ${scoreName} ${signed(
-              node.gain,
-            )}, ${lockedName}. Select to inspect.`,
+          ? t(
+              "Cell {label}, starts in {block}. Drag to move, double-click to rename.",
+              { label: node.label, block: blockWord(node.side) },
+            )
+          : t(
+              "Cell {label}, {block}, {score} {gain}, {locked}. Select to inspect.",
+              {
+                label: node.label,
+                block: blockWord(node.side),
+                score: scoreName,
+                gain: signed(node.gain),
+                locked: lockedName,
+              },
+            ),
       );
       entry.group.setAttribute(
         "aria-pressed",
         isSelected ? "true" : "false",
       );
       entry.title.textContent = state.editing
-        ? `Cell ${node.label} · drag to move · double-click to rename`
-        : `Cell ${node.label} · ${blockWord(node.side)} · ${scoreName} ${signed(
-            node.gain,
-          )}${node.locked ? ` · ${lockedName}` : ""}`;
+        ? t("Cell {label} · drag to move · double-click to rename", {
+            label: node.label,
+          })
+        : t("Cell {label} · {block} · {score} {gain}{locked}", {
+            label: node.label,
+            block: blockWord(node.side),
+            score: scoreName,
+            gain: signed(node.gain),
+            locked: node.locked ? t(" · {locked}", { locked: lockedName }) : "",
+          });
     });
   }
 
@@ -1965,44 +2102,61 @@
 
     el.countA.textContent = sizeA;
     el.countB.textContent = sizeB;
-    el.blockACountLabel.textContent = `${sizeA} ${sizeA === 1 ? "cell" : "cells"}`;
-    el.blockBCountLabel.textContent = `${sizeB} ${sizeB === 1 ? "cell" : "cells"}`;
+    el.blockACountLabel.textContent = t(
+      sizeA === 1 ? "{n} cell" : "{n} cells",
+      { n: sizeA },
+    );
+    el.blockBCountLabel.textContent = t(
+      sizeB === 1 ? "{n} cell" : "{n} cells",
+      { n: sizeB },
+    );
     const kl = metrics.algorithm === "KL";
     el.capNote.textContent = kl
-      ? `fixed ${sizeA} / ${sizeB}`
-      : `cap ${metrics.maxSize} / block`;
+      ? t("fixed {a} / {b}", { a: sizeA, b: sizeB })
+      : t("cap {max} / block", { max: metrics.maxSize });
     el.balanceA.style.width = `${percentA}%`;
     el.balanceB.style.width = `${percentB}%`;
     el.capMarkerLeft.style.display = kl ? "none" : "";
     el.capMarkerRight.style.display = kl ? "none" : "";
     el.capMarkerLeft.style.left = `${markerLeft}%`;
     el.capMarkerRight.style.left = `${markerRight}%`;
-    el.capMarkerLeft.title = `Maximum block size: ${metrics.maxSize} cells`;
-    el.capMarkerRight.title = `Maximum block size: ${metrics.maxSize} cells`;
+    el.capMarkerLeft.title = t("Maximum block size: {max} cells", {
+      max: metrics.maxSize,
+    });
+    el.capMarkerRight.title = t("Maximum block size: {max} cells", {
+      max: metrics.maxSize,
+    });
 
     el.cutValue.textContent = metrics.cut;
     if (metrics.improvement > 0) {
-      el.cutDelta.textContent = `−${metrics.improvement} from start`;
+      el.cutDelta.textContent = t("−{n} from start", {
+        n: metrics.improvement,
+      });
       el.cutDelta.classList.add("is-good");
     } else {
-      el.cutDelta.textContent = `start ${metrics.initialCut}`;
+      el.cutDelta.textContent = t("start {n}", { n: metrics.initialCut });
       el.cutDelta.classList.remove("is-good");
     }
     const critical = state.engine.getCriticalNets();
     const criticalTotal = metrics.criticalNets;
     const breakdown = [];
     if (metrics.cutCriticalNets > 0) {
-      breakdown.push(`${metrics.cutCriticalNets} cut-critical`);
+      breakdown.push(
+        t("{n} cut-critical", { n: metrics.cutCriticalNets }),
+      );
     }
     if (metrics.uncutCriticalNets > 0) {
-      breakdown.push(`${metrics.uncutCriticalNets} uncut-critical`);
+      breakdown.push(
+        t("{n} uncut-critical", { n: metrics.uncutCriticalNets }),
+      );
     }
-    el.criticalCount.textContent = `${criticalTotal} critical ${
-      criticalTotal === 1 ? "net" : "nets"
-    }`;
+    el.criticalCount.textContent = t(
+      criticalTotal === 1 ? "{n} critical net" : "{n} critical nets",
+      { n: criticalTotal },
+    );
     el.criticalBreakdown.textContent = breakdown.length
       ? breakdown.join(" · ")
-      : "none";
+      : t("none");
     el.criticalBreakdown.classList.toggle(
       "has-critical",
       criticalTotal > 0,
@@ -2011,18 +2165,35 @@
     const criticalNames = critical.all.map(
       (net) =>
         `${net.label || net.id} (${
-          net.type === "cut" ? "cut-critical" : "uncut-critical"
+          net.type === "cut"
+            ? t("cut-critical")
+            : t("uncut-critical")
         })`,
     );
-    const criticalDefinition =
-      "A net is critical when moving one cell can change whether it is cut: A=0, A=1, B=0, or B=1. Cut-critical nets are cut and one move can uncut them; uncut-critical nets are internal and one move can cut them.";
+    const criticalDefinition = t(
+      "A net is critical when moving one cell can change whether it is cut: A=0, A=1, B=0, or B=1. Cut-critical nets are cut and one move can uncut them; uncut-critical nets are internal and one move can cut them.",
+    );
     const criticalLabel = criticalTotal
-      ? `${criticalTotal} critical ${criticalTotal === 1 ? "net" : "nets"}: ${metrics.cutCriticalNets} cut-critical, ${metrics.uncutCriticalNets} uncut-critical.`
-      : "No critical nets.";
+      ? t(
+          criticalTotal === 1
+            ? "{n} critical net: {cutCritical} cut-critical, {uncutCritical} uncut-critical."
+            : "{n} critical nets: {cutCritical} cut-critical, {uncutCritical} uncut-critical.",
+          {
+            n: criticalTotal,
+            cutCritical: metrics.cutCriticalNets,
+            uncutCritical: metrics.uncutCriticalNets,
+          },
+        )
+      : t("No critical nets.");
     el.criticalSummary.setAttribute("aria-label", criticalLabel);
     el.criticalSummary.title = criticalTotal
-      ? `Critical nets: ${criticalNames.join(", ")}. ${criticalDefinition}`
-      : `No critical nets. ${criticalDefinition}`;
+      ? t("Critical nets: {names}. {definition}", {
+          names: criticalNames.join(", "),
+          definition: criticalDefinition,
+        })
+      : t("No critical nets. {definition}", {
+          definition: criticalDefinition,
+        });
     el.criticalBreakdown.title = el.criticalSummary.title;
     el.criticalSummary.classList.toggle("has-critical", criticalTotal > 0);
 
@@ -2038,26 +2209,37 @@
     el.statusPill.className = `status-pill ${statusClass}`.trim();
 
     if (state.editing) {
-      el.statusText.textContent = "Editing";
+      el.statusText.textContent = t("Editing");
     } else if (metrics.status === STATUS.READY) {
-      el.statusText.textContent = "Ready";
+      el.statusText.textContent = t("Ready");
     } else if (metrics.status === STATUS.ACTIVE) {
       const kl = state.engine.algorithm === "KL";
-      const unit = kl
-        ? metrics.passMoves === 1
-          ? "swap"
-          : "swaps"
-        : metrics.passMoves === 1
-          ? "move"
-          : "moves";
+      const unit = t(
+        kl
+          ? metrics.passMoves === 1
+            ? "swap"
+            : "swaps"
+          : metrics.passMoves === 1
+            ? "move"
+            : "moves",
+      );
       el.statusText.textContent =
         metrics.passMoves === 0
-          ? `Pass ${metrics.pass} · ${kl ? "D scores" : "gains"}`
-          : `Pass ${metrics.pass} · ${metrics.passMoves} ${unit}`;
+          ? t("Pass {pass} · {mode}", {
+              pass: metrics.pass,
+              mode: kl ? t("D scores") : t("gains"),
+            })
+          : t("Pass {pass} · {count} {unit}", {
+              pass: metrics.pass,
+              count: metrics.passMoves,
+              unit,
+            });
     } else if (metrics.status === STATUS.BETWEEN) {
-      el.statusText.textContent = `Pass ${metrics.pass} · improved`;
+      el.statusText.textContent = t("Pass {pass} · improved", {
+        pass: metrics.pass,
+      });
     } else {
-      el.statusText.textContent = "Converged";
+      el.statusText.textContent = t("Converged");
     }
   }
 
@@ -2065,37 +2247,47 @@
     const metrics = state.engine.getMetrics();
     el.metricCut.textContent = metrics.cut;
     el.metricImprovement.textContent =
-      metrics.improvement > 0 ? `−${metrics.improvement} from start` : `start ${metrics.initialCut}`;
+      metrics.improvement > 0
+        ? t("−{n} from start", { n: metrics.improvement })
+        : t("start {n}", { n: metrics.initialCut });
     el.metricImprovement.style.color = metrics.improvement > 0 ? "var(--mint)" : "";
 
     el.metricPass.textContent = metrics.pass || "0";
     el.metricPassState.textContent =
       metrics.status === STATUS.READY
-        ? "ready"
+        ? t("ready")
         : metrics.status === STATUS.ACTIVE
-          ? "active"
+          ? t("active")
           : metrics.status === STATUS.BETWEEN
-            ? "between"
-            : "done";
+            ? t("between")
+            : t("done");
 
     const keptSoFar =
       metrics.acceptedMoves +
       (metrics.status === STATUS.ACTIVE ? metrics.passBestMoveCount : 0);
     el.metricKept.textContent = keptSoFar;
-    el.metricAttempted.textContent = `${metrics.totalMoves} attempted`;
+    el.metricAttempted.textContent = t("{n} attempted", {
+      n: metrics.totalMoves,
+    });
 
     const passGain =
       metrics.status === STATUS.READY ? 0 : Math.max(0, metrics.passStartCut - metrics.passBestCut);
     el.metricGain.textContent = signed(passGain);
     el.metricGain.classList.toggle("is-positive", passGain > 0);
     el.metricBestPrefix.textContent =
-      metrics.status === STATUS.READY ? `start ${metrics.cut}` : `best ${metrics.passBestCut}`;
+      metrics.status === STATUS.READY
+        ? t("start {n}", { n: metrics.cut })
+        : t("best {cut}", { cut: metrics.passBestCut });
   }
 
   function renderTransport() {
     const done = state.engine.status === STATUS.DONE;
     const kl = state.engine.algorithm === "KL";
-    el.playLabel.textContent = state.playing ? "Pause" : done ? "Replay" : "Play";
+    el.playLabel.textContent = state.playing
+      ? t("Pause")
+      : done
+        ? t("Replay")
+        : t("Play");
     el.playBtn.classList.toggle("is-playing", state.playing);
     el.stepBtn.disabled = state.editing || state.playing || done;
     el.passBtn.disabled = state.editing || state.playing || done;
@@ -2104,12 +2296,12 @@
     el.resplitBtn.disabled = state.editing;
     el.slackRange.disabled = state.editing || kl;
     el.playBtn.title = state.editing
-      ? "Finish editing to run the solver"
+      ? t("Finish editing to run the solver")
       : state.playing
-        ? "Pause (Space)"
+        ? t("Pause (Space)")
         : done
-          ? "Replay run (Space)"
-          : "Play (Space)";
+          ? t("Replay run (Space)")
+          : t("Play (Space)");
   }
 
   function updateAlgorithmUI() {
@@ -2120,27 +2312,30 @@
       button.setAttribute("aria-pressed", active ? "true" : "false");
       button.disabled = state.editing;
     });
-    el.tabGains.textContent = kl ? "Pair queue" : "Gain queue";
-    el.metricMovesLabel.textContent = kl ? "Kept swaps" : "Kept moves";
-    const phaseNames = kl
-      ? ["Split", "Compute D", "Best pair", "Swap & lock", "Update D", "Best prefix"]
-      : ["Split", "Gain buckets", "Pick best", "Move & lock", "Update gains", "Best prefix"];
+    el.tabGains.textContent = kl ? t("Pair queue") : t("Gain queue");
+    el.metricMovesLabel.textContent = kl ? t("Kept swaps") : t("Kept moves");
+    const phaseNames = (
+      kl
+        ? ["Split", "Compute D", "Best pair", "Swap & lock", "Update D", "Best prefix"]
+        : ["Split", "Gain buckets", "Pick best", "Move & lock", "Update gains", "Best prefix"]
+    ).map((label) => t(label));
     phaseEls.forEach((phase, index) => {
       const label = phase.querySelector("span:last-child");
       if (label) label.textContent = phaseNames[index];
     });
     el.slackRange.disabled = state.editing || kl;
     if (kl) {
-      el.slackOut.textContent = "fixed";
-      el.slackHelp.textContent =
-        "KL swaps keep the starting block sizes; block counts do not change.";
+      el.slackOut.textContent = t("fixed");
+      el.slackHelp.textContent = t(
+        "KL swaps keep the starting block sizes; block counts do not change.",
+      );
     }
   }
 
   function setAlgorithm(algorithm) {
     if (!["FM", "KL"].includes(algorithm) || state.algorithm === algorithm) return;
     if (state.editing) {
-      showToast("Finish editing before switching algorithms");
+      showToast(t("Finish editing before switching algorithms"));
       return;
     }
     stopPlayback();
@@ -2154,9 +2349,11 @@
     buildScene();
     renderAll({ animate: false });
     showToast(
-      algorithm === "KL"
-        ? "KL mode · swap one cell from each block"
-        : "FM mode · move one cell at a time",
+      t(
+        algorithm === "KL"
+          ? "KL mode · swap one cell from each block"
+          : "FM mode · move one cell at a time",
+      ),
     );
   }
 
@@ -2168,10 +2365,10 @@
     if (state.editing) {
       const message =
         state.tool === "add"
-          ? "Click empty canvas to add a cell. Use the inspector to rename or change its starting block."
+          ? t("Click empty canvas to add a cell. Use the inspector to rename or change its starting block.")
           : state.tool === "connect"
-            ? "Click two or more cells, then <strong>Create net</strong>. Press Esc to cancel."
-            : "Drag cells to move them. Double-click a name to rename. Click a net line to inspect or delete it.";
+            ? t("Click two or more cells, then <strong>Create net</strong>. Press Esc to cancel.")
+            : t("Drag cells to move them. Double-click a name to rename. Click a net line to inspect or delete it.");
       el.nextStep.innerHTML = message;
       return;
     }
@@ -2179,38 +2376,61 @@
     const kl = engine.algorithm === "KL";
     if (metrics.status === STATUS.READY) {
       html = kl
-        ? `Press <strong>Step</strong> to compute <code>D(v)</code> and the pair queue for pass 1.`
-        : `Press <strong>Step</strong> to compute gains for pass 1.`;
+        ? t("Press <strong>Step</strong> to compute <code>D(v)</code> and the pair queue for pass 1.")
+        : t("Press <strong>Step</strong> to compute gains for pass 1.");
     } else if (metrics.status === STATUS.ACTIVE) {
       if (!candidate) {
         html = kl
-          ? `Every cell is fixed or one block has no free cell. Next step closes the pass and restores its best prefix.`
-          : `All eligible cells are locked. Next step closes the pass and restores its best prefix.`;
+          ? t("Every cell is fixed or one block has no free cell. Next step closes the pass and restores its best prefix.")
+          : t("All eligible cells are locked. Next step closes the pass and restores its best prefix.");
       } else if (kl) {
         const pairText = `<strong>${escapeHtml(candidate.a.label)} ↔ ${escapeHtml(
           candidate.b.label,
         )}</strong> (${signed(candidate.gain)})`;
         html =
           metrics.passMoves === 0
-            ? `${engine.nodes.length} free cells scored. Next swap: ${pairText} · ${blockName(
-                candidate.a.from,
-              )} ↔ ${blockName(candidate.b.from)}.`
-            : `Next swap: ${pairText} · cut ${metrics.cut}.`;
+            ? t("{cells} free cells scored. Next swap: {pair} · {a} ↔ {b}.", {
+                cells: engine.nodes.length,
+                pair: pairText,
+                a: blockName(candidate.a.from),
+                b: blockName(candidate.b.from),
+              })
+            : t("Next swap: {pair} · cut {cut}.", {
+                pair: pairText,
+                cut: metrics.cut,
+              });
       } else if (metrics.passMoves === 0) {
-        html = `${engine.nodes.length} gains computed. Next: <strong>${escapeHtml(
-          candidate.label,
-        )}</strong> (${signed(candidate.gain)}) ${blockName(candidate.from)} → ${blockName(
-          candidate.to,
-        )}.`;
+        html = t("{cells} gains computed. Next: <strong>{label}</strong> ({gain}) {from} → {to}.", {
+          cells: engine.nodes.length,
+          label: escapeHtml(candidate.label),
+          gain: signed(candidate.gain),
+          from: blockName(candidate.from),
+          to: blockName(candidate.to),
+        });
       } else {
-        html = `Next pick: <strong>${escapeHtml(candidate.label)}</strong> (${signed(
-          candidate.gain,
-        )}) ${blockName(candidate.from)} → ${blockName(candidate.to)} · cut ${metrics.cut}.`;
+        html = t("Next pick: <strong>{label}</strong> ({gain}) {from} → {to} · cut {cut}.", {
+          label: escapeHtml(candidate.label),
+          gain: signed(candidate.gain),
+          from: blockName(candidate.from),
+          to: blockName(candidate.to),
+          cut: metrics.cut,
+        });
       }
     } else if (metrics.status === STATUS.BETWEEN) {
-      html = `Pass ${metrics.pass} kept <strong>cut ${metrics.cut}</strong> (${metrics.lastPassImprovement} fewer). Next Step starts pass ${metrics.pass + 1}.`;
+      html = t(
+        "Pass {pass} kept <strong>cut {cut}</strong> ({improvement} fewer). Next Step starts pass {next}.",
+        {
+          pass: metrics.pass,
+          cut: metrics.cut,
+          improvement: metrics.lastPassImprovement,
+          next: metrics.pass + 1,
+        },
+      );
     } else {
-      html = `No improving pass remains. Final cut <strong>${metrics.cut}</strong>, ${metrics.improvement} fewer than the start.`;
+      html = t(
+        "No improving pass remains. Final cut <strong>{cut}</strong>, {improvement} fewer than the start.",
+        { cut: metrics.cut, improvement: metrics.improvement },
+      );
     }
     el.nextStep.innerHTML = html;
   }
@@ -2258,41 +2478,54 @@
   function renderSliderLabels() {
     el.speedOut.textContent = `${state.speed.toFixed(1)}×`;
     const metrics = state.engine.getMetrics();
-    el.slackLabel.textContent = metrics.algorithm === "KL" ? "Block sizes" : "Balance slack";
+    el.slackLabel.textContent =
+      metrics.algorithm === "KL" ? t("Block sizes") : t("Balance slack");
     if (metrics.algorithm === "KL") {
-      el.slackOut.textContent = "fixed";
-      el.slackHelp.textContent =
-        "KL swaps keep the starting block sizes; block counts do not change.";
+      el.slackOut.textContent = t("fixed");
+      el.slackHelp.textContent = t(
+        "KL swaps keep the starting block sizes; block counts do not change.",
+      );
       return;
     }
     el.slackOut.textContent =
-      metrics.slack === 0 ? "0 cells" : `+${metrics.slack} ${metrics.slack === 1 ? "cell" : "cells"}`;
+      metrics.slack === 0
+        ? t("0 cells")
+        : t(metrics.slack === 1 ? "+{n} cell" : "+{n} cells", {
+            n: metrics.slack,
+          });
     const count = state.graph.nodes.length;
     if (count < 2) {
       el.slackHelp.textContent =
         count === 0
-          ? "Add at least two cells before finishing the graph."
-          : "Add one more cell before finishing the graph.";
+          ? t("Add at least two cells before finishing the graph.")
+          : t("Add one more cell before finishing the graph.");
     } else if (metrics.minSize === metrics.maxSize) {
-      el.slackHelp.textContent = `Strict ${metrics.maxSize}/${count} split. Single-cell moves are blocked.`;
+      el.slackHelp.textContent = t(
+        "Strict {max}/{count} split. Single-cell moves are blocked.",
+        { max: metrics.maxSize, count },
+      );
     } else {
-      el.slackHelp.textContent = `Blocks stay between ${metrics.minSize} and ${metrics.maxSize} of ${count} cells.`;
+      el.slackHelp.textContent = t(
+        "Blocks stay between {min} and {max} of {count} cells.",
+        { min: metrics.minSize, max: metrics.maxSize, count },
+      );
     }
   }
 
   function updateInspector() {
     if (!state.engine) return;
+    el.inspectorLabel.textContent = t("Cell inspector");
     if (state.editing) {
       renderEditingInspector();
       return;
     }
 
     if (!state.selectedId) {
-      el.inspectorHint.textContent = "click a cell";
+      el.inspectorHint.textContent = t("click a cell");
       el.inspectorBody.innerHTML = `
         <div class="empty-state">
           <span class="empty-glyph" aria-hidden="true">⌖</span>
-          <p>Select any cell to see its score breakdown and incident nets.</p>
+          <p>${t("Select any cell to see its score breakdown and incident nets.")}</p>
         </div>`;
       return;
     }
@@ -2315,17 +2548,22 @@
       ? `<div class="kl-swap-note">${
           !klActive
             ? state.engine.status === STATUS.DONE
-              ? "Run complete. Reset to inspect swap candidates again."
-              : "Start a pass to compute D(v) and the free swap pairs."
+              ? t("Run complete. Reset to inspect swap candidates again.")
+              : t("Start a pass to compute D(v) and the free swap pairs.")
             : details.locked
-              ? "Fixed for this pass. It becomes available again at the next pass boundary."
+              ? t("Fixed for this pass. It becomes available again at the next pass boundary.")
               : bestSwap
-                ? `Best free swap: <strong>${escapeHtml(
-                    bestSwap.a.nodeId === details.id
-                      ? bestSwap.b.label
-                      : bestSwap.a.label,
-                  )}</strong> (${signed(bestSwap.gain)}) · cut ${bestSwap.cutBefore}→${bestSwap.cutAfter}.`
-                : "No free partner in the other block."
+                ? t("Best free swap: <strong>{label}</strong> ({gain}) · cut {before}→{after}.", {
+                    label: escapeHtml(
+                      bestSwap.a.nodeId === details.id
+                        ? bestSwap.b.label
+                        : bestSwap.a.label,
+                    ),
+                    gain: signed(bestSwap.gain),
+                    before: bestSwap.cutBefore,
+                    after: bestSwap.cutAfter,
+                  })
+                : t("No free partner in the other block.")
         }</div>`
       : "";
     const netRows = details.incidentNets.length
@@ -2341,40 +2579,51 @@
             </div>`,
           )
           .join("")
-      : `<div class="net-row"><span class="net-cells">No incident nets</span></div>`;
+      : `<div class="net-row"><span class="net-cells">${t("No incident nets")}</span></div>`;
 
     el.inspectorBody.innerHTML = `
       <div class="inspector-header">
         <div class="cell-orb${sideClass}">${escapeHtml(details.label)}</div>
         <div class="inspector-identity">
           <div class="inspector-name">
-            Cell ${escapeHtml(details.label)}
-            <span class="block-chip${sideClass}">Block ${blockName(details.side)}</span>
+            ${t("Cell {label}", { label: escapeHtml(details.label) })}
+            <span class="block-chip${sideClass}">${t("Block {block}", {
+              block: blockName(details.side),
+            })}</span>
           </div>
           <div class="inspector-sub">
             <span class="lock-state ${details.locked ? "is-locked" : ""}">${
               kl
                 ? details.locked
-                  ? "Fixed for this pass"
-                  : "Free to swap"
+                  ? t("Fixed for this pass")
+                  : t("Free to swap")
                 : details.locked
-                  ? "Locked for this pass"
-                  : "Unlocked"
-            }</span> · ${details.cutNets} incident cut ${details.cutNets === 1 ? "net" : "nets"}
+                  ? t("Locked for this pass")
+                  : t("Unlocked")
+            }</span> · ${t(
+              details.cutNets === 1
+                ? "{n} incident cut net"
+                : "{n} incident cut nets",
+              { n: details.cutNets },
+            )}
           </div>
         </div>
       </div>
       <div class="inspector-stats">
-        <div class="stat-box"><span>${kl ? "D(v)" : "Gain"}</span><b class="${gainClass}">${signed(details.gain)}</b></div>
+        <div class="stat-box"><span${kl ? ' class="stat-formula"' : ""}>${kl ? "D(v)" : t("Gain")}</span><b class="${gainClass}">${signed(details.gain)}</b></div>
         <div class="stat-box"><span>FS</span><b>${details.fs}</b></div>
         <div class="stat-box"><span>TE</span><b>${details.te}</b></div>
-        <div class="stat-box"><span>Block</span><b>${blockName(details.side)}</b></div>
+        <div class="stat-box"><span>${t("Block")}</span><b>${blockName(details.side)}</b></div>
       </div>
       ${swapNote}
       <div class="net-section-head">
-        <span>Incident nets (${details.incidentNets.length})</span>
-        <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.">
-          ${details.criticalForCell} critical here
+        <span>${t("Incident nets ({n})", {
+          n: details.incidentNets.length,
+        })}</span>
+        <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="${t(
+          "Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.",
+        )}">
+          ${t("{n} critical here", { n: details.criticalForCell })}
         </span>
       </div>
       <div class="net-list">${netRows}</div>`;
@@ -2389,14 +2638,15 @@
         renderEditingInspector();
         return;
       }
+      el.inspectorLabel.textContent = t("Net inspector");
       const counts = net.counts;
       const criticalLabelText = net.cutCritical
-        ? "cut-critical"
+        ? t("cut-critical")
         : net.uncutCritical
-          ? "uncut-critical"
+          ? t("uncut-critical")
           : net.cut
-            ? "cut, not critical"
-            : "internal";
+            ? t("cut, not critical")
+            : t("internal");
       let criticalCallout = "";
       if (net.cutCritical) {
         const loneSides = [0, 1].filter((side) => net.criticalSides[side]);
@@ -2405,41 +2655,62 @@
             const cells = net.cells.filter(
               (cell) => cell.side === side && cell.critical,
             );
-            return `${cells.map((cell) => escapeHtml(cell.label)).join(", ")} in Block ${blockName(
-              side,
-            )}`;
+            return t("{cells} in Block {block}", {
+              cells: cells.map((cell) => escapeHtml(cell.label)).join(", "),
+              block: blockName(side),
+            });
           })
           .join(" · ");
         criticalCallout = `<div class="critical-callout">
-            <span class="critical-kicker">cut-critical</span>
-            <span>Lone ${loneSides.length > 1 ? "cells" : "cell"}: ${loneText}. Moving ${
-              loneSides.length > 1 ? "either one" : "it"
-            } closes the net and contributes +1 to FS.</span>
+            <span class="critical-kicker">${t("cut-critical")}</span>
+            <span>${t(
+              loneSides.length > 1
+                ? "Lone cells: {list}. Moving either one closes the net and contributes +1 to FS."
+                : "Lone cell: {list}. Moving it closes the net and contributes +1 to FS.",
+              { list: loneText },
+            )}</span>
           </div>`;
       } else if (net.uncutCritical) {
         const side = net.criticalSides[0] ? 0 : 1;
-        const destination = blockName(1 - side);
+        const destination = blockWord(1 - side);
         criticalCallout = `<div class="critical-callout is-uncut">
-            <span class="critical-kicker">uncut-critical</span>
-            <span>All ${net.cells.length} cells are in ${blockWord(
-              side,
-            )}. Moving any one to ${destination} cuts the net and contributes −1 to its gain (TE).</span>
+            <span class="critical-kicker">${t("uncut-critical")}</span>
+            <span>${t(
+              "All {cells} cells are in {block}. Moving any one to {destination} cuts the net and contributes −1 to its gain (TE).",
+              {
+                cells: net.cells.length,
+                block: blockWord(side),
+                destination,
+              },
+            )}</span>
           </div>`;
       } else if (net.cut) {
         criticalCallout = `<div class="critical-callout is-noncritical">
-            <span class="critical-kicker">not critical</span>
-            <span>A ${counts[0]} / B ${counts[1]}. Moving one cell keeps this net cut, so it is neither cut-critical nor uncut-critical.</span>
+            <span class="critical-kicker">${t("not critical")}</span>
+            <span>${t(
+              "A {a} / B {b}. Moving one cell keeps this net cut, so it is neither cut-critical nor uncut-critical.",
+              { a: counts[0], b: counts[1] },
+            )}</span>
           </div>`;
       }
       const members = net.cells
         .map((cell) => {
-          let title = `Select ${escapeHtml(cell.label)}`;
+          let title = t("Select {label}", {
+            label: escapeHtml(cell.label),
+          });
           if (cell.critical && net.cutCritical) {
-            title += ` — lone cell from Block ${blockName(
-              cell.side,
-            )}; moving it closes the net`;
+            title = t(
+              "Select {label} — lone cell from Block {block}; moving it closes the net",
+              {
+                label: escapeHtml(cell.label),
+                block: blockName(cell.side),
+              },
+            );
           } else if (cell.critical && net.uncutCritical) {
-            title += " — moving it would cut this uncut-critical net";
+            title = t(
+              "Select {label} — moving it would cut this uncut-critical net",
+              { label: escapeHtml(cell.label) },
+            );
           }
           return `
             <button class="net-member${cell.side === 1 ? " is-b" : ""}${
@@ -2451,32 +2722,36 @@
             </button>`;
         })
         .join("");
-      el.inspectorHint.textContent = "net selected";
+      el.inspectorHint.textContent = t("net selected");
       el.inspectorBody.innerHTML = `
         <div class="inspector-header">
           <div class="cell-orb net-orb">${escapeHtml(net.id.slice(0, 3))}</div>
           <div class="inspector-identity">
             <label class="inspector-edit-name">
-              <span>Net name</span>
+              <span>${t("Net name")}</span>
               <input class="inspector-name-input" data-edit-field="net-label"
                 data-id="${escapeHtml(net.id)}" value="${escapeHtml(net.label ?? net.id)}"
                 maxlength="32" autocomplete="off">
             </label>
             <div class="inspector-sub">
-              ${net.cells.length} cells · A ${counts[0]} / B ${counts[1]} ·
-              ${criticalLabelText}
+              ${t(net.cells.length === 1 ? "{n} cell" : "{n} cells", {
+                n: net.cells.length,
+              })} · ${t("Pin distribution A {a} / B {b}", {
+                a: counts[0],
+                b: counts[1],
+              })} · ${criticalLabelText}
             </div>
           </div>
         </div>
         ${criticalCallout}
         <div class="edit-controls">
           <button class="edit-control edit-danger" type="button" data-edit-action="delete-net">
-            Delete net
+            ${t("Delete net")}
           </button>
         </div>
-        <div class="net-section-head"><span>Connected cells</span><span>${net.cells.length}</span></div>
+        <div class="net-section-head"><span>${t("Connected cells")}</span><span>${net.cells.length}</span></div>
         <div class="net-member-grid">${members}</div>
-        <div class="edit-note"><strong>Tip:</strong> drag a net line? Select cells and use <strong>Connect</strong> to create a new hyperedge. Delete and rebuild to change membership.</div>`;
+        <div class="edit-note"><strong>${t("Tip:")}</strong> ${t("drag a net line? Select cells and use <strong>Connect</strong> to create a new hyperedge. Delete and rebuild to change membership.")}</div>`;
       return;
     }
 
@@ -2502,58 +2777,65 @@
               </button>`,
             )
             .join("")
-        : `<div class="net-row"><span class="net-cells">No incident nets — use Connect</span></div>`;
-      el.inspectorHint.textContent = "editing";
+        : `<div class="net-row"><span class="net-cells">${t("No incident nets — use Connect")}</span></div>`;
+      el.inspectorHint.textContent = t("editing");
       el.inspectorBody.innerHTML = `
         <div class="inspector-header">
           <div class="cell-orb${sideClass}">${escapeHtml(details.label)}</div>
           <div class="inspector-identity">
             <label class="inspector-edit-name">
-              <span>Cell name</span>
+              <span>${t("Cell name")}</span>
               <input class="inspector-name-input" data-edit-field="cell-label"
                 data-id="${escapeHtml(details.id)}" value="${escapeHtml(details.label)}"
                 maxlength="32" autocomplete="off">
             </label>
-            <div class="inspector-sub">${details.incidentNets.length} incident ${
-              details.incidentNets.length === 1 ? "net" : "nets"
-            } · drag on board to move</div>
+            <div class="inspector-sub">${t(
+              details.incidentNets.length === 1
+                ? "{n} incident net · drag on board to move"
+                : "{n} incident nets · drag on board to move",
+              { n: details.incidentNets.length },
+            )}</div>
           </div>
         </div>
         <div class="edit-controls">
-          <div class="edit-segment" role="group" aria-label="Starting block">
+          <div class="edit-segment" role="group" aria-label="${t("Starting block")}">
             <button class="edit-control${details.side === 0 ? " is-active" : ""}" type="button"
-              data-edit-action="set-side" data-side="0">Block A</button>
+              data-edit-action="set-side" data-side="0">${t("Block A")}</button>
             <button class="edit-control${details.side === 1 ? " is-active is-b" : ""}" type="button"
-              data-edit-action="set-side" data-side="1">Block B</button>
+              data-edit-action="set-side" data-side="1">${t("Block B")}</button>
           </div>
-          <button class="edit-control edit-connect" type="button" data-edit-action="connect-cell">Connect…</button>
-          <button class="edit-control edit-danger" type="button" data-edit-action="delete-cell">Delete</button>
+          <button class="edit-control edit-connect" type="button" data-edit-action="connect-cell">${t("Connect…")}</button>
+          <button class="edit-control edit-danger" type="button" data-edit-action="delete-cell">${t("Delete")}</button>
         </div>
-        <div class="edit-note"><strong>Tip:</strong> double-click the cell on the board to rename it. Drag across the cut line to change its starting block.</div>
+        <div class="edit-note"><strong>${t("Tip:")}</strong> ${t("Double-click the cell on the board to rename it. Drag across the cut line to change its starting block.")}</div>
         <div class="net-section-head">
-          <span>Incident nets (${details.incidentNets.length})</span>
-          <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.">
-            ${details.criticalForCell} critical here
+          <span>${t("Incident nets ({n})", {
+            n: details.incidentNets.length,
+          })}</span>
+          <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="${t(
+            "Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.",
+          )}">
+            ${t("{n} critical here", { n: details.criticalForCell })}
           </span>
         </div>
         <div class="net-list">${netRows}</div>`;
       return;
     }
 
-    el.inspectorHint.textContent = "direct edit";
+    el.inspectorHint.textContent = t("direct edit");
     if (engine.nodes.length === 0) {
-      el.inspectorHint.textContent = "empty canvas";
+      el.inspectorHint.textContent = t("empty canvas");
       el.inspectorBody.innerHTML = `
         <div class="empty-state">
           <span class="empty-glyph" aria-hidden="true">＋</span>
-          <p>Click anywhere on the board to add your first cell. The add-cell tool is already active, or press <kbd>N</kbd>.</p>
+          <p>${t("Click anywhere on the board to add your first cell. The add-cell tool is already active, or press <kbd>N</kbd>.")}</p>
         </div>`;
       return;
     }
     el.inspectorBody.innerHTML = `
       <div class="empty-state">
         <span class="empty-glyph" aria-hidden="true">✎</span>
-        <p>Drag a cell to move it. Double-click to rename. Select a cell or net for detailed editing.</p>
+        <p>${t("Drag a cell to move it. Double-click to rename. Select a cell or net for detailed editing.")}</p>
       </div>`;
   }
 
@@ -2580,16 +2862,19 @@
     if (state.editing) {
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
-          <b>Graph editor is open</b>
-          <span>Add, rename, move, connect, or delete cells on the board. Finish editing to run ${state.algorithm} on the revised graph.</span>
+          <b>${t("Graph editor is open")}</b>
+          <span>${t(
+            "Add, rename, move, connect, or delete cells on the board. Finish editing to run {algorithm} on the revised graph.",
+            { algorithm: state.algorithm },
+          )}</span>
         </div>`;
       return;
     }
     if (!log.length) {
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
-          <b>${state.algorithm === "KL" ? "No swaps yet" : "No moves yet"}</b>
-          <span>Press <kbd>S</kbd> or <kbd>Step</kbd> to open pass 1.</span>
+          <b>${state.algorithm === "KL" ? t("No swaps yet") : t("No moves yet")}</b>
+          <span>${t("Press <kbd>S</kbd> or <kbd>Step</kbd> to open pass 1.")}</span>
         </div>`;
       return;
     }
@@ -2597,7 +2882,9 @@
     const rows = log
       .map((entry) => {
         if (entry.type === "pass-start") {
-          return `<div class="log-divider"><span>Pass ${entry.pass} begins</span><span>cut ${entry.cut}</span></div>`;
+          return `<div class="log-divider"><span>${t("Pass {pass} begins", {
+            pass: entry.pass,
+          })}</span><span>${t("cut {cut}", { cut: entry.cut })}</span></div>`;
         }
         if (entry.type === "move") {
           const gainClass =
@@ -2613,7 +2900,7 @@
             .join(" ");
           return `
             <div class="${rowClasses}" title="${
-              entry.rolledBack ? "Rolled back at pass end" : "Kept in best prefix"
+              entry.rolledBack ? t("Rolled back at pass end") : t("Kept in best prefix")
             }">
               <span class="log-serial">${entry.indexInPass}</span>
               <span class="log-move">
@@ -2621,7 +2908,7 @@
                 <span class="side-chip${fromClass}">${blockName(entry.from)}</span>
                 <span class="log-route">→</span>
                 <span class="side-chip${toClass}">${blockName(entry.to)}</span>
-                ${entry.becameBest ? `<span class="log-best-mark">BEST</span>` : ""}
+                ${entry.becameBest ? `<span class="log-best-mark">${t("BEST")}</span>` : ""}
               </span>
               <span class="log-gain ${gainClass}">${signed(entry.gain)}</span>
               <span class="log-cut">${entry.cutBefore}→${entry.cut}</span>
@@ -2639,7 +2926,7 @@
             .join(" ");
           return `
             <div class="${rowClasses}" title="${
-              entry.rolledBack ? "Rolled back at pass end" : "Kept in best prefix"
+              entry.rolledBack ? t("Rolled back at pass end") : t("Kept in best prefix")
             } · ${escapeHtml(entry.a.label)} ${blockName(entry.a.from)}→${blockName(
               entry.a.to,
             )}, ${escapeHtml(entry.b.label)} ${blockName(entry.b.from)}→${blockName(
@@ -2652,7 +2939,7 @@
                   <span class="log-route">↔</span>
                   <span class="log-node">${escapeHtml(entry.b.label)}</span>
                 </span>
-                ${entry.becameBest ? `<span class="log-best-mark">BEST</span>` : ""}
+                ${entry.becameBest ? `<span class="log-best-mark">${t("BEST")}</span>` : ""}
               </span>
               <span class="log-gain ${gainClass}">${signed(entry.gain)}</span>
               <span class="log-cut">${entry.cutBefore}→${entry.cut}</span>
@@ -2661,16 +2948,25 @@
         if (entry.type === "pass-end") {
           const improved = entry.improvement > 0;
           const summaryClass = improved ? "log-summary" : "log-summary is-stalled";
-          const unit = state.algorithm === "KL" ? "swaps" : "moves";
+          const unit = t(state.algorithm === "KL" ? "swaps" : "moves");
           return `
             <div class="${summaryClass}">
-              <strong>Pass ${entry.pass}: cut ${entry.startCut} → ${entry.bestCut}</strong><br>
+              <strong>${t("Pass {pass}: cut {startCut} → {bestCut}", {
+                pass: entry.pass,
+                startCut: entry.startCut,
+                bestCut: entry.bestCut,
+              })}</strong><br>
               ${
                 improved
-                  ? `Kept ${entry.acceptedMoves} of ${entry.attemptedMoves} ${unit}; rolled back ${entry.rolledBack}.`
-                  : `No improvement; kept the pass-start partition.`
+                  ? t("Kept {accepted} of {attempted} {unit}; rolled back {rolledBack}.", {
+                      accepted: entry.acceptedMoves,
+                      attempted: entry.attemptedMoves,
+                      unit,
+                      rolledBack: entry.rolledBack,
+                    })
+                  : t("No improvement; kept the pass-start partition.")
               }
-              <span>${entry.attemptedMoves} attempted</span>
+              <span>${t("{n} attempted", { n: entry.attemptedMoves })}</span>
             </div>`;
         }
         return "";
@@ -2685,13 +2981,13 @@
     const engine = state.engine;
     if (engine.status !== STATUS.ACTIVE || state.editing) {
       const statusText = state.editing
-        ? "Finish editing the graph to compute swap candidates."
+        ? t("Finish editing the graph to compute swap candidates.")
         : engine.status === STATUS.READY
-          ? "Start a pass to compute D(v) and the free pair queue."
+          ? t("Start a pass to compute D(v) and the free pair queue.")
           : engine.status === STATUS.BETWEEN
-            ? "Pass closed. D(v) is recomputed when the next pass starts."
-            : "Run complete. Reset to inspect the first pass again.";
-      el.tabPanel.innerHTML = `<div class="tab-empty"><b>No active pair queue</b><span>${statusText}</span></div>`;
+            ? t("Pass closed. D(v) is recomputed when the next pass starts.")
+            : t("Run complete. Reset to inspect the first pass again.");
+      el.tabPanel.innerHTML = `<div class="tab-empty"><b>${t("No active pair queue")}</b><span>${statusText}</span></div>`;
       return;
     }
 
@@ -2699,8 +2995,8 @@
     if (!queue.length) {
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
-          <b>No legal swaps</b>
-          <span>Every cell is fixed or one block has no free cell. Close the pass to keep its best prefix.</span>
+          <b>${t("No legal swaps")}</b>
+          <span>${t("Every cell is fixed or one block has no free cell. Close the pass to keep its best prefix.")}</span>
         </div>`;
       return;
     }
@@ -2727,9 +3023,12 @@
       .join("");
 
     el.tabPanel.innerHTML = `
-      <div class="queue-head"><span>Best free swaps</span><span>${engine.blockSizes[0]}/${engine.blockSizes[1]} · fixed</span></div>
+      <div class="queue-head"><span>${t("Best free swaps")}</span><span>${t(
+        "{a}/{b} · fixed",
+        { a: engine.blockSizes[0], b: engine.blockSizes[1] },
+      )}</span></div>
       ${rows}
-      <div class="queue-note">Highest pair gain wins; ties go alphabetically. Both cells lock. Cut effect assumes only this swap; on a hypergraph it is the exact net-cut change.</div>`;
+      <div class="queue-note">${t("Highest pair gain wins; ties go alphabetically. Both cells lock. Cut effect assumes only this swap; on a hypergraph it is the exact net-cut change.")}</div>`;
   }
 
   function renderGainQueue() {
@@ -2740,13 +3039,13 @@
     }
     if (engine.status !== STATUS.ACTIVE || state.editing) {
       const statusText = state.editing
-        ? "Finish editing the graph to compute gains."
+        ? t("Finish editing the graph to compute gains.")
         : engine.status === STATUS.READY
-          ? "Start a pass to fill the gain buckets."
+          ? t("Start a pass to fill the gain buckets.")
           : engine.status === STATUS.BETWEEN
-            ? "Pass closed. Gains are recomputed when the next pass starts."
-            : "Run complete. Reset to inspect the first pass again.";
-      el.tabPanel.innerHTML = `<div class="tab-empty"><b>No active gain queue</b><span>${statusText}</span></div>`;
+            ? t("Pass closed. Gains are recomputed when the next pass starts.")
+            : t("Run complete. Reset to inspect the first pass again.");
+      el.tabPanel.innerHTML = `<div class="tab-empty"><b>${t("No active gain queue")}</b><span>${statusText}</span></div>`;
       return;
     }
 
@@ -2754,8 +3053,8 @@
     if (!queue.length) {
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
-          <b>No eligible moves</b>
-          <span>Every cell is locked or would violate the block bounds. Close the pass to keep its best prefix.</span>
+          <b>${t("No eligible moves")}</b>
+          <span>${t("Every cell is locked or would violate the block bounds. Close the pass to keep its best prefix.")}</span>
         </div>`;
       return;
     }
@@ -2771,7 +3070,9 @@
             <span class="queue-orb${sideClass}">${escapeHtml(candidate.label)}</span>
             <span class="queue-move">${blockName(candidate.from)} → ${blockName(
               candidate.to,
-            )} <em>dest ${candidate.destinationSize}</em></span>
+            )} <em>${t("dest {n}", {
+              n: candidate.destinationSize,
+            })}</em></span>
             <span class="queue-gain ${gainClass}">${signed(candidate.gain)}</span>
             <span class="queue-cut">${engine.cut}→${engine.cut - candidate.gain}</span>
           </div>`;
@@ -2779,9 +3080,16 @@
       .join("");
 
     el.tabPanel.innerHTML = `
-      <div class="queue-head"><span>Eligible moves</span><span>${engine.blockSizes[0]}/${engine.blockSizes[1]} · cap ${engine.maxSize}</span></div>
+      <div class="queue-head"><span>${t("Eligible moves")}</span><span>${t(
+        "{a}/{b} · cap {max}",
+        {
+          a: engine.blockSizes[0],
+          b: engine.blockSizes[1],
+          max: engine.maxSize,
+        },
+      )}</span></div>
       ${rows}
-      <div class="queue-note">Highest gain wins. Ties go to the destination with the smaller block. Cut effect assumes only this move.</div>`;
+      <div class="queue-note">${t("Highest gain wins. Ties go to the destination with the smaller block. Cut effect assumes only this move.")}</div>`;
   }
 
   function renderMethod() {
@@ -2790,40 +3098,54 @@
     if (engine.algorithm === "KL") {
       el.tabPanel.innerHTML = `
         <div class="method-content">
-          <h3>D(v) and pair gain</h3>
-          <div class="formula">D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</div>
+          <h3>${t("D(v) and pair gain")}</h3>
+          <div class="formula">${t("D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)")}</div>
           <div class="formula">g(a,b) = D(a) + D(b) − 2c(a,b)</div>
-          <p><code>D(v)</code> is the change from moving one free cell alone; on this board it equals <code>FS − TE</code>. The pair gain is exact for the unit-cost net cut. For two-terminal nets it reduces to the slide's graph formula, where <code>c(a,b)</code> is the shared edge count.</p>
-          <h3>The KL pass</h3>
+          <p>${t(
+            "D(v) is the change from moving one free cell alone; on this board it equals FS − TE. The pair gain is exact for the unit-cost net cut. For two-terminal nets it reduces to the slide's graph formula, where c(a,b) is the shared edge count.",
+          )}</p>
+          <h3>${t("The KL pass")}</h3>
           <ul class="method-list">
-            <li>Score every free cell and every legal A↔B pair.</li>
-            <li>Swap the highest-gain pair and lock both cells.</li>
-            <li>Recompute the scores; keep exploring even through negative gains.</li>
-            <li>Remember the prefix with the lowest cut.</li>
-            <li>Roll back to that prefix and unlock all cells; stop if the cut did not improve.</li>
+            <li>${t("Score every free cell and every legal A↔B pair.")}</li>
+            <li>${t("Swap the highest-gain pair and lock both cells.")}</li>
+            <li>${t("Recompute the scores; keep exploring even through negative gains.")}</li>
+            <li>${t("Remember the prefix with the lowest cut.")}</li>
+            <li>${t("Roll back to that prefix and unlock all cells; stop if the cut did not improve.")}</li>
           </ul>
-          <h3>Balance</h3>
-          <p>KL swaps preserve the starting split: ${metrics.blockSizes[0]} cells in A and ${metrics.blockSizes[1]} in B. Slack is an FM-only control.</p>
-          <p><code>Step</code> advances one swap or opens a pass. <code>Run pass</code> finishes the current pass. <code>Play</code> runs to convergence.</p>
+          <h3>${t("Balance")}</h3>
+          <p>${t(
+            "KL swaps preserve the starting split: {a} cells in A and {b} in B. Slack is an FM-only control.",
+            { a: metrics.blockSizes[0], b: metrics.blockSizes[1] },
+          )}</p>
+          <p>${t(
+            "<code>Step</code> advances one swap or opens a pass. <code>Run pass</code> finishes the current pass. <code>Play</code> runs to convergence.",
+          )}</p>
         </div>`;
       return;
     }
     el.tabPanel.innerHTML = `
       <div class="method-content">
-        <h3>Gain of a cell</h3>
+        <h3>${t("Gain of a cell")}</h3>
         <div class="formula">gain(v) = FS(v) − TE(v)</div>
-        <p><code>FS</code> counts cut-critical nets where <em>v</em> is the lone cell on its block; moving closes them. <code>TE</code> counts uncut-critical internal nets on <em>v</em>'s block; moving opens them. A <code>2/2</code> cut net is noncritical. Move gain is the exact cut reduction.</p>
-        <h3>The pass</h3>
+        <p>${t(
+          "FS counts cut-critical nets where v is the lone cell on its block; moving closes them. TE counts uncut-critical internal nets on v's block; moving opens them. A 2/2 cut net is noncritical. Move gain is the exact cut reduction.",
+        )}</p>
+        <h3>${t("The pass")}</h3>
         <ul class="method-list">
-          <li>Compute gains, then take the highest-gain eligible cell.</li>
-          <li>Move it and lock it for this pass.</li>
-          <li>Update only the gains of cells sharing a net with it.</li>
-          <li>Record the prefix with the lowest cut.</li>
-          <li>Roll back to that prefix; stop if the cut did not improve.</li>
+          <li>${t("Compute gains, then take the highest-gain eligible cell.")}</li>
+          <li>${t("Move it and lock it for this pass.")}</li>
+          <li>${t("Update only the gains of cells sharing a net with it.")}</li>
+          <li>${t("Record the prefix with the lowest cut.")}</li>
+          <li>${t("Roll back to that prefix; stop if the cut did not improve.")}</li>
         </ul>
-        <h3>Balance</h3>
-        <p>This run allows ${metrics.minSize}–${metrics.maxSize} cells per block (slack +${metrics.slack}). Moves that would leave the range are not eligible.</p>
-        <p><code>Step</code> advances one move or opens a pass. <code>Run pass</code> finishes the current pass. <code>Play</code> runs to convergence.</p>
+        <h3>${t("Balance")}</h3>
+        <p>${t(
+          "This run allows {min}–{max} cells per block (slack +{slack}). Moves that would leave the range are not eligible.",
+          { min: metrics.minSize, max: metrics.maxSize, slack: metrics.slack },
+        )}</p>
+        <p>${t(
+          "<code>Step</code> advances one move or opens a pass. <code>Run pass</code> finishes the current pass. <code>Play</code> runs to convergence.",
+        )}</p>
       </div>`;
   }
 
@@ -2862,7 +3184,7 @@
       state.engine.reset();
       state.lastEvent = null;
       renderAll({ animate: true });
-      showToast("Replaying from the initial partition");
+      showToast(t("Replaying from the initial partition"));
       initialDelay = Math.max(220, 520 / state.speed);
     }
     if (state.playing) return;
@@ -2895,6 +3217,26 @@
     state.engine.reset();
     state.lastEvent = null;
     renderAll({ animate: true });
+  }
+
+  function updateLanguageUI() {
+    const language = getLanguage();
+    el.languageOptions.forEach((button) => {
+      const active = button.dataset.language === language;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function changeLanguage(language) {
+    if (language === getLanguage()) return;
+    setLanguage(language);
+    updateLanguageUI();
+    populatePresetSelect();
+    if (state.engine) {
+      renderAll({ animate: false });
+      renderTab();
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -2941,6 +3283,12 @@
 
   el.helpDialog.addEventListener("click", (event) => {
     if (event.target === el.helpDialog) el.helpDialog.close();
+  });
+
+  el.languageOptions.forEach((button) => {
+    button.addEventListener("click", () => {
+      changeLanguage(button.dataset.language);
+    });
   });
 
   el.editBtn.addEventListener("click", () => {
@@ -3175,6 +3523,8 @@
   /* Boot                                                                */
   /* ------------------------------------------------------------------ */
 
+  applyTranslations();
+  updateLanguageUI();
   populatePresetSelect();
   loadPreset("signal");
 })();
