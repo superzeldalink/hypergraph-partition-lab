@@ -34,11 +34,46 @@
   }
 
   /**
-   * A cut net is critical when one block contains exactly one of its cells.
-   * Moving that lone cell closes the net and contributes +1 to its gain.
+   * The course definition: a net is critical when moving one of its cells can
+   * change whether the net is cut. For a net with at least two cells that means
+   * A=0, A=1, B=0, or B=1.
+   *
+   * - cut-critical: cut with one cell on a side; moving that cell uncuts it (FS).
+   * - uncut-critical: internal; moving a cell cuts it (TE).
    */
+  function netCriticality(counts) {
+    const cut = isCutCounts(counts);
+    const total = counts[0] + counts[1];
+    const critical = total > 1 && (counts[0] <= 1 || counts[1] <= 1);
+    return {
+      cut,
+      critical,
+      cutCritical: critical && cut,
+      uncutCritical: critical && !cut,
+      type: critical ? (cut ? "cut" : "uncut") : null,
+    };
+  }
+
   function isCriticalCounts(counts) {
-    return isCutCounts(counts) && (counts[0] === 1 || counts[1] === 1);
+    return netCriticality(counts).critical;
+  }
+
+  /** The narrower FM case: cut nets that one move can close. */
+  function isCutCriticalCounts(counts) {
+    return netCriticality(counts).cutCritical;
+  }
+
+  /**
+   * Which sides contain a cell whose move changes the net's status.
+   * For a cut-critical net this is the lone side; for an uncut-critical net it
+   * is the populated side (every cell there can open the net).
+   */
+  function criticalSidesForCounts(counts) {
+    const info = netCriticality(counts);
+    if (!info.critical) return [false, false];
+    return info.cut
+      ? [counts[0] === 1, counts[1] === 1]
+      : [counts[0] > 0, counts[1] > 0];
   }
 
   function shuffleInPlace(items, rng) {
@@ -61,6 +96,17 @@
     return sides;
   }
 
+  function cellsFromEntry(entry) {
+    if (Array.isArray(entry)) return entry;
+    if (!entry || typeof entry !== "object") return [];
+    if (Array.isArray(entry.cells)) return entry.cells;
+    if (Array.isArray(entry.nodes)) return entry.nodes;
+    if (entry.source !== undefined && entry.target !== undefined) {
+      return [entry.source, entry.target];
+    }
+    return [];
+  }
+
   function normalizeGraph(graph) {
     if (!graph || !Array.isArray(graph.nodes)) {
       throw new Error("A graph needs a nodes array.");
@@ -81,18 +127,28 @@
     const rawNets = Array.isArray(graph.nets)
       ? graph.nets
       : Array.isArray(graph.edges)
-        ? graph.edges.map((edge, index) => ({
-            id: edge.id ?? `e${index + 1}`,
-            cells: edge.cells ?? edge.nodes ?? edge,
-          }))
+        ? graph.edges.map((edge, index) => {
+            if (edge && typeof edge === "object" && !Array.isArray(edge)) {
+              if (edge.weight !== undefined && Number(edge.weight) !== 1) {
+                const edgeId = edge.id ?? index + 1;
+                throw new Error(
+                  `Edge ${edgeId} has weight ${edge.weight}; this lab uses unit-weight nets. Split weighted edges into parallel nets.`,
+                );
+              }
+            }
+            return {
+              id: edge && edge.id !== undefined ? edge.id : `e${index + 1}`,
+              label: edge && edge.label,
+              name: edge && edge.name,
+              cells: cellsFromEntry(edge),
+            };
+          })
         : [];
 
     const indexOf = new Map(nodes.map((node, index) => [node.id, index]));
     const nets = [];
     rawNets.forEach((rawNet, netIndex) => {
-      const rawCells = Array.isArray(rawNet)
-        ? rawNet
-        : rawNet.cells ?? rawNet.nodes ?? [];
+      const rawCells = cellsFromEntry(rawNet);
       const unique = [];
       const localSeen = new Set();
       rawCells.forEach((rawCell) => {
@@ -102,10 +158,11 @@
         unique.push(index);
       });
       if (unique.length < 2) return;
-      const id = String(rawNet.id ?? `n${netIndex + 1}`);
+      const netObject = rawNet && typeof rawNet === "object" ? rawNet : {};
+      const id = String(netObject.id ?? `n${netIndex + 1}`);
       nets.push({
         id,
-        label: String(rawNet.label ?? rawNet.name ?? id),
+        label: String(netObject.label ?? netObject.name ?? id),
         cells: unique,
       });
     });
@@ -487,16 +544,19 @@
       const incidentNets = this.incident[index].map((netIndex) => {
         const net = this.nets[netIndex];
         const counts = this.netCounts[netIndex];
-        const cut = isCutCounts(counts);
-        const critical = isCriticalCounts(counts);
+        const info = netCriticality(counts);
+        const criticalSides = criticalSidesForCounts(counts);
         return {
           id: net.id,
           label: net.label,
           cells: net.cells.map((cellIndex) => this.nodes[cellIndex].label),
-          cut,
-          critical,
-          criticalForCell: cut && counts[node.side] === 1,
-          criticalSides: [cut && counts[0] === 1, cut && counts[1] === 1],
+          cut: info.cut,
+          critical: info.critical,
+          criticalType: info.type,
+          cutCritical: info.cutCritical,
+          uncutCritical: info.uncutCritical,
+          criticalForCell: criticalSides[node.side],
+          criticalSides,
           counts: counts.slice(),
           size: net.cells.length,
         };
@@ -511,7 +571,9 @@
         gain: breakdown.gain,
         fs: breakdown.fs,
         te: breakdown.te,
-        criticalForCell: breakdown.fs,
+        criticalForCell: breakdown.fs + breakdown.te,
+        cutCriticalForCell: breakdown.fs,
+        uncutCriticalForCell: breakdown.te,
         cutNets: incidentNets.filter((net) => net.cut).length,
         incidentNets,
         blockSize: this.blockSizes[node.side],
@@ -523,13 +585,16 @@
       if (netIndex === -1) return null;
       const net = this.nets[netIndex];
       const counts = this.netCounts[netIndex];
-      const cut = isCutCounts(counts);
-      const criticalSides = [cut && counts[0] === 1, cut && counts[1] === 1];
+      const info = netCriticality(counts);
+      const criticalSides = criticalSidesForCounts(counts);
       return {
         id: net.id,
         label: net.label,
-        cut,
-        critical: isCriticalCounts(counts),
+        cut: info.cut,
+        critical: info.critical,
+        criticalType: info.type,
+        cutCritical: info.cutCritical,
+        uncutCritical: info.uncutCritical,
         criticalSides,
         counts: counts.slice(),
         size: net.cells.length,
@@ -579,13 +644,44 @@
       return candidates.slice(0, limit);
     }
 
-    getMetrics() {
+    getCriticalNets() {
+      const cutCritical = [];
+      const uncutCritical = [];
+      this.nets.forEach((net, netIndex) => {
+        const counts = this.netCounts[netIndex];
+        const info = netCriticality(counts);
+        if (!info.critical) return;
+        const entry = {
+          id: net.id,
+          label: net.label,
+          counts: counts.slice(),
+          type: info.type,
+        };
+        if (info.cutCritical) cutCritical.push(entry);
+        else uncutCritical.push(entry);
+      });
       return {
+        cutCritical,
+        uncutCritical,
+        all: [...cutCritical, ...uncutCritical],
+      };
+    }
+
+    getMetrics() {
+      let cutCriticalNets = 0;
+      let uncutCriticalNets = 0;
+      this.netCounts.forEach((counts) => {
+        const info = netCriticality(counts);
+        if (info.cutCritical) cutCriticalNets += 1;
+        else if (info.uncutCritical) uncutCriticalNets += 1;
+      });
+      return {
+        algorithm: "FM",
+        fixedBlockSizes: false,
         cut: this.cut,
-        criticalNets: this.netCounts.reduce(
-          (total, counts) => total + (isCriticalCounts(counts) ? 1 : 0),
-          0,
-        ),
+        criticalNets: cutCriticalNets + uncutCriticalNets,
+        cutCriticalNets,
+        uncutCriticalNets,
         initialCut: this.initialCut,
         improvement: this.initialCut - this.cut,
         bestCut: this.bestCut,
@@ -612,6 +708,11 @@
     STATUS,
     balancedSplit,
     normalizeGraph,
-    version: "1.0.0",
+    isCutCounts,
+    isCriticalCounts,
+    isCutCriticalCounts,
+    netCriticality,
+    criticalSidesForCounts,
+    version: "1.1.0",
   };
 });

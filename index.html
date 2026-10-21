@@ -4,21 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>FM Partition Lab · Fiduccia–Mattheyses</title>
+  <title>Partition Lab · FM + KL</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="app-header">
-    <a class="brand" href="#" aria-label="FM Partition Lab home">
+    <a class="brand" href="#" aria-label="Partition Lab home">
       <span class="brand-mark" aria-hidden="true">
         <span class="brand-block brand-block-a">A</span>
         <span class="brand-cut"></span>
         <span class="brand-block brand-block-b">B</span>
       </span>
       <span class="brand-copy">
-        <span class="brand-title">FM Partition Lab</span>
-        <span class="brand-subtitle">Fiduccia–Mattheyses hypergraph partitioning</span>
+        <span class="brand-title">Partition Lab</span>
+        <span class="brand-subtitle">Fiduccia–Mattheyses + Kernighan–Lin partitioning</span>
       </span>
     </a>
 
@@ -41,7 +41,7 @@
         <span class="data-braces" aria-hidden="true">{ }</span>
         <span>Data</span>
       </button>
-      <button class="button button-icon" id="helpBtn" type="button" title="How FM works" aria-label="How FM works">
+      <button class="button button-icon" id="helpBtn" type="button" title="How FM and KL work" aria-label="How FM and KL work">
         <span>?</span>
       </button>
     </div>
@@ -75,9 +75,10 @@
             <strong id="cutValue">12</strong>
             <span class="cut-delta" id="cutDelta">from 12</span>
           </div>
-          <span class="cut-critical" id="criticalSummary" title="Cut nets with exactly one cell on one side. Moving that cell closes the net.">
-            0 critical
+          <span class="cut-critical" id="criticalSummary" title="Nets where moving one cell can change whether the net is cut.">
+            <span id="criticalCount">0 critical nets</span>
           </span>
+          <span class="cut-critical-detail" id="criticalBreakdown">none</span>
         </div>
       </header>
 
@@ -128,7 +129,7 @@
         </div>
         <svg id="graphSvg" viewBox="0 0 1000 640" role="img" aria-labelledby="svgTitle svgDesc">
           <title id="svgTitle">Hypergraph partition board</title>
-          <desc id="svgDesc">Cells appear in two blocks. Coral nets cross the cut. Click a cell to inspect it.</desc>
+          <desc id="svgDesc">Cells appear in two blocks. Coral nets cross the cut; muted nets stay inside a block. Every net has a visible name: amber names are critical, steel-blue names are not. Select a cell to inspect it; in the editor, click a net line to inspect that net.</desc>
           <defs>
             <linearGradient id="blockAGradient" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stop-color="#0b1625" stop-opacity="0.78" />
@@ -162,6 +163,7 @@
           </g>
 
           <g id="edgesLayer" aria-hidden="true"></g>
+          <g id="netLabelsLayer" aria-hidden="true"></g>
           <g id="editorLayer" aria-hidden="true"></g>
           <g id="nodesLayer"></g>
         </svg>
@@ -171,13 +173,15 @@
         <div class="legend" aria-label="Legend">
           <span><i class="legend-line legend-internal"></i>Internal net</span>
           <span><i class="legend-line legend-cut"></i>Cut net</span>
+          <span><b class="legend-net-id">n3</b>Critical name</span>
+          <span><b class="legend-net-id is-normal">n1</b>Other name</span>
           <span><i class="legend-node"></i>Unlocked cell</span>
           <span><i class="legend-lock"></i>Locked</span>
         </div>
-        <p class="next-step" id="nextStep">Press Step to compute gains for pass 1.</p>
+        <p class="next-step" id="nextStep">Press Step to open pass 1.</p>
       </footer>
 
-      <div class="phase-strip" id="phaseStrip" aria-label="FM pass anatomy">
+      <div class="phase-strip" id="phaseStrip" aria-label="Partitioning pass anatomy">
         <div class="phase" data-phase="0"><span class="phase-index">01</span><span>Split</span></div>
         <span class="phase-arrow" aria-hidden="true">›</span>
         <div class="phase" data-phase="1"><span class="phase-index">02</span><span>Gain buckets</span></div>
@@ -197,6 +201,18 @@
         <div class="panel-heading">
           <span class="eyebrow">Run control</span>
           <span class="key-hint">Space · S · P</span>
+        </div>
+        <div class="algorithm-switch" role="group" aria-label="Partitioning algorithm">
+          <button class="algorithm-option is-active" id="algorithmKL" type="button"
+            data-algorithm="KL" aria-pressed="true" title="Kernighan–Lin: swap a pair and lock both">
+            <span class="algorithm-code">KL</span>
+            <span class="algorithm-copy">pair swaps</span>
+          </button>
+          <button class="algorithm-option" id="algorithmFM" type="button"
+            data-algorithm="FM" aria-pressed="false" title="Fiduccia–Mattheyses: move one cell and lock it">
+            <span class="algorithm-code">FM</span>
+            <span class="algorithm-copy">cell moves</span>
+          </button>
         </div>
         <div class="transport">
           <button class="button button-primary" id="playBtn" type="button">
@@ -229,7 +245,7 @@
           <input id="speedRange" type="range" min="0.5" max="3" value="1" step="0.5">
         </label>
         <label class="slider-row" for="slackRange">
-          <span class="slider-label">Balance slack <output id="slackOut">+1 cell</output></span>
+          <span class="slider-label"><span id="slackLabel">Balance slack</span> <output id="slackOut">+1 cell</output></span>
           <input id="slackRange" type="range" min="0" max="3" value="1" step="1">
           <span class="slider-help" id="slackHelp">Each block may grow to 7 of 12 cells.</span>
         </label>
@@ -247,7 +263,7 @@
           <span class="metric-foot" id="metricPassState">ready</span>
         </div>
         <div class="metric">
-          <span class="metric-label">Kept moves</span>
+          <span class="metric-label" id="metricMovesLabel">Kept moves</span>
           <strong id="metricKept">0</strong>
           <span class="metric-foot" id="metricAttempted">0 attempted</span>
         </div>
@@ -287,40 +303,44 @@
       <span class="eyebrow">The method</span>
       <form method="dialog"><button class="button button-icon" aria-label="Close help">×</button></form>
     </div>
-    <h2>Fiduccia–Mattheyses partitioning</h2>
-    <p class="dialog-lede">FM is a classic move-based heuristic for splitting a hypergraph into two balanced blocks while cutting as few nets as possible.</p>
+    <h2>FM and KL partitioning</h2>
+    <p class="dialog-lede">Both heuristics split a netlist into two blocks while cutting as few nets as possible. FM moves one cell at a time; KL swaps one cell from each block.</p>
     <div class="help-grid">
       <section>
         <h3>1 · Start balanced</h3>
-        <p>Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut.</p>
+        <p>Cells begin in two blocks. FM permits each block to grow to <code>ceil(n/2) + slack</code> cells, so a single-cell move can temporarily trade balance for a better cut. KL swaps preserve the starting block sizes.</p>
       </section>
       <section>
-        <h3>2 · Score every cell</h3>
-        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. FS counts nets where <em>v</em> is the only cell on its side, so moving it closes those nets. TE counts nets wholly on <em>v</em>'s side, so moving it opens a net. A cut net with exactly one cell on one side is <strong>critical</strong>; its lone cell can close it by moving.</p>
+        <h3>2 · Critical nets</h3>
+        <p>A net is <strong>critical</strong> when moving one of its cells can change whether the net is cut: <code>A=0</code>, <code>A=1</code>, <code>B=0</code>, or <code>B=1</code>. <em>Cut-critical</em> nets are cut with one cell on a side; moving that lone cell uncuts it (FS). <em>Uncut-critical</em> nets are internal; moving a cell cuts them (TE). A <code>2/2</code> cut net is not critical.</p>
       </section>
       <section>
-        <h3>3 · Move the best cell</h3>
-        <p>Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking allows FM to climb out of local minima without immediately undoing a move.</p>
+        <h3>3 · FM: move the best cell</h3>
+        <p>For cell <em>v</em>, <code>gain(v) = FS(v) − TE(v)</code>. Choose the highest-gain eligible cell, move it across, and <strong>lock it for the rest of the pass</strong>. Locking lets FM climb out of local minima without immediately undoing a move.</p>
       </section>
       <section>
-        <h3>4 · Update the buckets</h3>
-        <p>Only gains of cells sharing a net with the moved cell can change. Their net counts are updated and their gains are recomputed, then the next best cell is selected.</p>
+        <h3>4 · KL: swap the best pair</h3>
+        <p>For a free cell <em>v</em>, <code>D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</code>. Pick a free pair with the largest <code>g(a,b) = D(a) + D(b) − 2c(a,b)</code>, swap both cells, and <strong>lock both</strong>. On this hypergraph board, the pair gain is the exact net-cut change; for two-terminal nets it equals the slide formula.</p>
       </section>
       <section>
-        <h3>5 · Keep the best prefix</h3>
-        <p>Cumulative gain can go down. FM remembers the prefix of the pass with the lowest cut. At pass end it rolls back all later moves, unlocks every cell, and starts again only if the cut improved.</p>
+        <h3>5 · Update and keep the best prefix</h3>
+        <p>Only cells incident to a changed net need updated scores. Record the prefix with the lowest cut. At pass end, roll back later moves/swaps, unlock every cell, and start another pass only if the cut improved. Stop when a pass has no improvement.</p>
       </section>
       <section>
         <h3>6 · Read the board</h3>
-        <p>Coral nets cross the cut. The pulsing cell is the next pick. Green and red badges show positive and negative gain. Click a cell for FS, TE, lock state, and incident nets; critical nets are marked amber, and the board reports the total under the cut.</p>
+        <p>Coral lines cross the cut; muted lines stay inside a block. <strong>Every net name is visible.</strong> Amber names are critical (cut-critical or uncut-critical); steel-blue names are noncritical. Select a cell for its incident-net A/B counts and the exact reason; in the editor, click a net line to inspect it directly. The pulsing cell(s) show the next FM move or KL pair. Green and red badges show gain or <code>D(v)</code>.</p>
       </section>
       <section>
-        <h3>7 · Edit the graph</h3>
-        <p><strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build a net. Pick two or more cells, then press <kbd>Enter</kbd> or click <em>Create net</em>. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it.</p>
+        <h3>7 · Switch algorithms</h3>
+        <p>Use the <strong>KL</strong> / <strong>FM</strong> switch in Run control. FM is the move-based hypergraph solver; KL is the pair-swap graph algorithm applied to the same nets. The cut readout is the same unit-cost net cut for both, and the graph, editor, balance strip, and critical-net inspector are shared.</p>
+      </section>
+      <section>
+        <h3>8 · Edit the graph</h3>
+        <p><strong>Edit graph</strong> turns the board into an editor. Drag cells to arrange or move them across the cut, double-click to rename, click <em>Add cell</em> then the board to create one, and use <em>Connect</em> to build nets. Pick two or more cells, then press <kbd>Enter</kbd> or click <em>Create net</em>. Connect stays active so you can build the next net; press <kbd>Esc</kbd> when finished. Select a net line to inspect or delete it. <em>Clear</em> wipes the board for a fresh start; <em>Undo</em> restores it.</p>
       </section>
     </div>
     <div class="dialog-footer">
-      <span>Step = one move (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
+      <span>Step = one FM move / KL swap (or one pass boundary). Run pass = finish this pass. Play = run to convergence.</span>
       <form method="dialog"><button class="button button-primary">Got it</button></form>
     </div>
   </dialog>
@@ -331,11 +351,11 @@
       <form method="dialog"><button class="button button-icon" aria-label="Close graph data">×</button></form>
     </div>
     <h2>Hypergraph JSON</h2>
-    <p class="dialog-lede">JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. An <code>initialPartition</code> is optional.</p>
+    <p class="dialog-lede">JSON is optional — use <strong>Edit graph</strong> for direct editing. You can still paste a graph here. Cells need unique IDs; each net is a list of two or more cell IDs. You can also supply <code>edges</code> as two-item arrays or <code>{ source, target }</code> objects; edge weights must be 1. An <code>initialPartition</code> is optional.</p>
     <div class="data-body">
       <textarea id="graphJson" spellcheck="false" aria-label="Hypergraph JSON"></textarea>
       <p class="data-error" id="dataError" role="alert"></p>
-      <p class="data-schema"><code>nodes: [{ id, label? }]</code> · <code>nets: [{ id?, cells: [id, …] }]</code></p>
+      <p class="data-schema"><code>nodes: [{ id, label? }]</code> · <code>nets: [{ id?, cells: [id, …] }]</code> · <code>edges: [{ source, target }]</code></p>
     </div>
     <div class="dialog-footer">
       <span>Two blocks are formed automatically. Larger graphs are supported, but the board is tuned for up to about 18 cells.</span>
@@ -349,6 +369,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="js/fm.js"></script>
+  <script src="js/kl.js"></script>
   <script src="js/presets.js"></script>
   <script src="js/app.js"></script>
 </body>

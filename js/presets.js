@@ -53,6 +53,13 @@
     ["D", "H"],
   ]);
 
+  const criticalNodes = ids("abcdefghi");
+  const criticalNets = [
+    { id: "N1", cells: ["a", "b", "c", "d"] },
+    { id: "N2", cells: ["e", "f", "g"] },
+    { id: "N3", cells: ["h", "d", "i"] },
+  ];
+
   const gridNodes = ids("ABCDEFGHIJKL");
   const gridEdges = [];
   const width = 4;
@@ -117,6 +124,141 @@
         nodes: gridNodes,
         nets: gridNets,
         initialPartition: gridNodes.map((_, index) => index % 2),
+      },
+    },
+    {
+      id: "critical",
+      title: "Critical-net example",
+      short: "9 cells · 3 nets",
+      description:
+        "N2 is uncut-critical, N3 is cut-critical, and the 2/2 cut net N1 is noncritical.",
+      graph: {
+        name: "Critical-net example",
+        description:
+          "The reference netlist: N1 cuts 2/2 and is noncritical; N2 is internal (3/0); N3 is cut 1/2. Moving a cell can change the cut status of N2 and N3.",
+        nodes: criticalNodes,
+        nets: criticalNets,
+        initialPartition: [0, 0, 1, 1, 0, 0, 0, 0, 1],
+      },
+    },
+    {
+      id: "bt1",
+      title: "BT1 · Merged-net circuit",
+      short: "8 cells · 6 nets",
+      description:
+        "Bài tập 1: circuit (a) merged into nets n1–n6, starting as A = {a,c,e,g} and B = {b,d,f,h}.",
+      graph: {
+        name: "BT1 graph",
+        description:
+          "The circuit (a) netlist merged into six nets: n1 = {a,c,e}, n2 = {b,c,d}, n3 = {c,e,f}, n4 = {d,f}, n5 = {e,g}, and n6 = {f,g,h}. Initial partition A = {a,c,e,g}, B = {b,d,f,h}.",
+        nodes: [
+          { id: "a", label: "a" },
+          { id: "b", label: "b" },
+          { id: "c", label: "c" },
+          { id: "d", label: "d" },
+          { id: "e", label: "e" },
+          { id: "f", label: "f" },
+          { id: "g", label: "g" },
+          { id: "h", label: "h" },
+        ],
+        nets: [
+          { id: "n1", label: "n1", cells: ["a", "c", "e"] },
+          { id: "n2", label: "n2", cells: ["b", "c", "d"] },
+          { id: "n3", label: "n3", cells: ["c", "e", "f"] },
+          { id: "n4", label: "n4", cells: ["d", "f"] },
+          { id: "n5", label: "n5", cells: ["e", "g"] },
+          { id: "n6", label: "n6", cells: ["f", "g", "h"] },
+        ],
+        initialPartition: [0, 1, 0, 1, 0, 1, 0, 1],
+      },
+    },
+    {
+      id: "bt2",
+      title: "BT2 · Two-way partition graph",
+      short: "6 cells · 8 nets",
+      description:
+        "Bài tập 2: a 6-node graph with 8 unit-weight edges starting as A = {a,b,c} and B = {d,e,f}.",
+      graph: {
+        name: "Two-way partition graph",
+        description:
+          "An undirected graph with 6 nodes and 8 unit-weight edges, divided into partitions A = {a,b,c} and B = {d,e,f} by a vertical dashed line.",
+        nodes: [
+          { id: "a", label: "a" },
+          { id: "b", label: "b" },
+          { id: "c", label: "c" },
+          { id: "d", label: "d" },
+          { id: "e", label: "e" },
+          { id: "f", label: "f" },
+        ],
+        nets: [
+          { id: "e1", label: "e1", cells: ["a", "d"] },
+          { id: "e2", label: "e2", cells: ["a", "e"] },
+          { id: "e3", label: "e3", cells: ["b", "c"] },
+          { id: "e4", label: "e4", cells: ["b", "e"] },
+          { id: "e5", label: "e5", cells: ["b", "f"] },
+          { id: "e6", label: "e6", cells: ["c", "f"] },
+          { id: "e7", label: "e7", cells: ["d", "e"] },
+          { id: "e8", label: "e8", cells: ["e", "f"] },
+        ],
+        initialPartition: [0, 0, 0, 1, 1, 1],
+      },
+    },
+    {
+      id: "bt4",
+      title: "BT4 · Reference hypergraph",
+      short: "9 cells · 3 nets",
+      description:
+        "Bài tập 4: the 9-node reference hypergraph with N1, N2, and N3 on a 6/3 start.",
+      graph: {
+        name: "Reference hypergraph",
+        description:
+          "A hypergraph with 9 nodes and 3 nets, divided into two partitions by a vertical dashed line. N1 connects nodes a, b, c, and d; N2 connects nodes e, f, and g; N3 connects nodes h, d, and i.",
+        nodes: [
+          { id: "a", label: "a" },
+          { id: "b", label: "b" },
+          { id: "c", label: "c" },
+          { id: "d", label: "d" },
+          { id: "e", label: "e" },
+          { id: "f", label: "f" },
+          { id: "g", label: "g" },
+          { id: "h", label: "h" },
+          { id: "i", label: "i" },
+        ],
+        nets: [
+          { id: "N1", label: "N1", cells: ["a", "b", "c", "d"] },
+          { id: "N2", label: "N2", cells: ["e", "f", "g"] },
+          { id: "N3", label: "N3", cells: ["h", "d", "i"] },
+        ],
+        initialPartition: [0, 0, 1, 1, 0, 0, 0, 0, 1],
+      },
+    },
+    {
+      id: "kl-example",
+      title: "KL Example 2.1",
+      short: "8 cells · 13 nets",
+      description:
+        "The slide's a–h graph. First pass: c ↔ e (+3), d ↔ f (+5), best prefix G₂ = 8.",
+      graph: {
+        name: "KL Example 2.1",
+        description:
+          "Initial cut 9. KL's first pass chooses c ↔ e (+3), d ↔ f (+5), then explores a ↔ g (−6) and b ↔ h (−2); the best prefix keeps the first two swaps and reaches cut 1.",
+        nodes: "abcdefgh".split("").map((id) => ({ id })),
+        nets: [
+          ["a", "b"],
+          ["a", "e"],
+          ["a", "f"],
+          ["b", "e"],
+          ["b", "f"],
+          ["c", "d"],
+          ["c", "f"],
+          ["c", "g"],
+          ["c", "h"],
+          ["d", "g"],
+          ["d", "h"],
+          ["e", "f"],
+          ["g", "h"],
+        ].map((cells, index) => ({ id: `e${index + 1}`, cells })),
+        initialPartition: [0, 0, 0, 0, 1, 1, 1, 1],
       },
     },
   ];

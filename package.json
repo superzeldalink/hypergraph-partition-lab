@@ -1,16 +1,17 @@
 {
-  "name": "fm-partition-lab",
-  "version": "1.0.0",
+  "name": "partition-lab",
+  "version": "2.0.0",
   "private": true,
-  "description": "Interactive Fiduccia-Mattheyses hypergraph partitioning solver with a step-through GUI.",
+  "description": "Dependency-free Fiduccia-Mattheyses and Kernighan-Lin hypergraph partitioning lab with a step-through GUI.",
   "scripts": {
     "start": "python3 -m http.server 4173",
     "test": "node --test tests/"
   },
   "keywords": [
     "fiduccia-mattheyses",
+    "kernighan-lin",
     "hypergraph",
-    "partitioning",
+    "graph-partitioning",
     "eda",
     "visualization"
   ],

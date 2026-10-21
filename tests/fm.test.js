@@ -76,6 +76,39 @@ test("normalizes edges, removes duplicate cells, and computes the initial cut", 
   assert.deepEqual(engine.blockSizes, [2, 1]);
 });
 
+test("accepts edge objects with source and target endpoints", () => {
+  const graph = {
+    name: "Two-way partition graph",
+    nodes: "abcdef".split("").map((id) => ({ id, label: id })),
+    edges: [
+      { source: "a", target: "d", weight: 1 },
+      { source: "a", target: "e", weight: 1 },
+      { source: "b", target: "c", weight: 1 },
+      { source: "b", target: "e", weight: 1 },
+      { source: "b", target: "f", weight: 1 },
+      { source: "c", target: "f", weight: 1 },
+      { source: "d", target: "e", weight: 1 },
+      { source: "e", target: "f", weight: 1 },
+    ],
+    initialPartition: [0, 0, 0, 1, 1, 1],
+  };
+  const engine = new FMEngine(graph, { slack: 1 });
+  assert.equal(engine.nodes.length, 6);
+  assert.equal(engine.nets.length, 8);
+  assert.deepEqual(engine.nets[0].cells, [0, 3]);
+  assert.equal(engine.cut, 5);
+  assert.deepEqual(engine.blockSizes, [3, 3]);
+
+  assert.throws(
+    () =>
+      new FMEngine({
+        nodes: [{ id: "a" }, { id: "b" }],
+        edges: [{ source: "a", target: "b", weight: 2 }],
+      }),
+    /unit-weight nets/,
+  );
+});
+
 test("hyperedge gain uses FS minus TE", () => {
   const graph = {
     nodes: "ABCD".split("").map((id) => ({ id })),
@@ -100,7 +133,7 @@ test("hyperedge gain uses FS minus TE", () => {
   );
 });
 
-test("critical nets identify the lone cell on a cut side", () => {
+test("critical nets cover both cut-critical and uncut-critical cases", () => {
   const graph = {
     nodes: "ABCD".split("").map((id) => ({ id })),
     nets: [
@@ -112,10 +145,18 @@ test("critical nets identify the lone cell on a cut side", () => {
   };
   const engine = new FMEngine(graph, { slack: 1 });
   assert.equal(engine.cut, 2);
-  assert.equal(engine.getMetrics().criticalNets, 2);
+  const metrics = engine.getMetrics();
+  assert.equal(metrics.criticalNets, 3);
+  assert.equal(metrics.cutCriticalNets, 2);
+  assert.equal(metrics.uncutCriticalNets, 1);
+  assert.deepEqual(
+    engine.getCriticalNets().all.map((net) => net.id),
+    ["n1", "n2", "n3"],
+  );
 
   const a = engine.getCellDetails("A");
   assert.equal(a.fs, 1);
+  assert.equal(a.te, 0);
   assert.equal(a.criticalForCell, 1);
   assert.equal(a.incidentNets.find((net) => net.id === "n1").criticalForCell, false);
   assert.deepEqual(
@@ -125,15 +166,28 @@ test("critical nets identify the lone cell on a cut side", () => {
 
   const b = engine.getCellDetails("B");
   assert.equal(b.fs, 2);
+  assert.equal(b.criticalForCell, 2);
   assert.equal(b.incidentNets.find((net) => net.id === "n1").criticalForCell, true);
 
   const n1 = engine.getNetDetails("n1");
   assert.equal(n1.critical, true);
+  assert.equal(n1.criticalType, "cut");
+  assert.equal(n1.cutCritical, true);
   assert.deepEqual(n1.counts, [2, 1]);
   assert.deepEqual(n1.criticalSides, [false, true]);
   assert.equal(n1.cells.find((cell) => cell.id === "B").critical, true);
   assert.equal(n1.cells.find((cell) => cell.id === "A").critical, false);
-  assert.equal(engine.getNetDetails("n3").critical, false);
+
+  const n3 = engine.getNetDetails("n3");
+  assert.equal(n3.critical, true);
+  assert.equal(n3.criticalType, "uncut");
+  assert.equal(n3.uncutCritical, true);
+  assert.deepEqual(n3.counts, [2, 0]);
+  assert.deepEqual(n3.criticalSides, [true, false]);
+  assert.equal(n3.cells.find((cell) => cell.id === "C").critical, true);
+  assert.equal(n3.cells.find((cell) => cell.id === "D").critical, true);
+  assert.equal(engine.getCellDetails("C").te, 1);
+  assert.equal(engine.getCellDetails("C").criticalForCell, 1);
   assert.equal(engine.getNetDetails("missing"), null);
 
   const mixed = new FMEngine(
@@ -146,8 +200,110 @@ test("critical nets identify the lone cell on a cut side", () => {
   );
   assert.equal(mixed.cut, 1);
   assert.equal(mixed.getMetrics().criticalNets, 0);
+  assert.equal(mixed.getMetrics().cutCriticalNets, 0);
+  assert.equal(mixed.getMetrics().uncutCriticalNets, 0);
   assert.equal(mixed.getNetDetails("n1").critical, false);
+  assert.equal(mixed.getNetDetails("n1").criticalType, null);
   assert.deepEqual(mixed.getNetDetails("n1").criticalSides, [false, false]);
+});
+
+test("reference graph reports N2 and N3 as the two critical nets", () => {
+  const graph = {
+    nodes: "abcdefghi".split("").map((id) => ({ id })),
+    nets: [
+      { id: "N1", cells: ["a", "b", "c", "d"] },
+      { id: "N2", cells: ["e", "f", "g"] },
+      { id: "N3", cells: ["h", "d", "i"] },
+    ],
+    initialPartition: [0, 0, 1, 1, 0, 0, 0, 0, 1],
+  };
+  const engine = new FMEngine(graph, { slack: 1 });
+  const metrics = engine.getMetrics();
+  assert.equal(engine.cut, 2);
+  assert.equal(metrics.criticalNets, 2);
+  assert.equal(metrics.cutCriticalNets, 1);
+  assert.equal(metrics.uncutCriticalNets, 1);
+  assert.deepEqual(engine.getNetDetails("N1").counts, [2, 2]);
+  assert.equal(engine.getNetDetails("N1").critical, false);
+  assert.deepEqual(engine.getNetDetails("N2").counts, [3, 0]);
+  assert.equal(engine.getNetDetails("N2").criticalType, "uncut");
+  assert.deepEqual(engine.getNetDetails("N3").counts, [1, 2]);
+  assert.equal(engine.getNetDetails("N3").criticalType, "cut");
+  assert.deepEqual(
+    engine.getCriticalNets().all.map((net) => [net.id, net.type]),
+    [
+      ["N3", "cut"],
+      ["N2", "uncut"],
+    ],
+  );
+});
+
+test("BT1 preset merges the circuit nets and keeps the starting partition", () => {
+  const preset = PRESETS.find((item) => item.id === "bt1");
+  assert.ok(preset, "BT1 preset should exist");
+  assert.equal(preset.graph.name, "BT1 graph");
+  assert.deepEqual(
+    preset.graph.nodes.map((node) => node.id),
+    "abcdefgh".split(""),
+  );
+  assert.deepEqual(
+    preset.graph.nets.map((net) => [net.id, net.cells]),
+    [
+      ["n1", ["a", "c", "e"]],
+      ["n2", ["b", "c", "d"]],
+      ["n3", ["c", "e", "f"]],
+      ["n4", ["d", "f"]],
+      ["n5", ["e", "g"]],
+      ["n6", ["f", "g", "h"]],
+    ],
+  );
+  assert.deepEqual(preset.graph.initialPartition, [0, 1, 0, 1, 0, 1, 0, 1]);
+  const engine = new FMEngine(preset.graph, { slack: 1 });
+  assert.equal(engine.cut, 3);
+  assert.deepEqual(engine.blockSizes, [4, 4]);
+});
+
+test("BT2 preset matches the two-way partition graph", () => {
+  const preset = PRESETS.find((item) => item.id === "bt2");
+  assert.ok(preset, "BT2 preset should exist");
+  assert.equal(preset.graph.name, "Two-way partition graph");
+  assert.deepEqual(
+    preset.graph.nodes.map((node) => node.id),
+    "abcdef".split(""),
+  );
+  assert.deepEqual(
+    preset.graph.nets.map((net) => net.cells),
+    [
+      ["a", "d"],
+      ["a", "e"],
+      ["b", "c"],
+      ["b", "e"],
+      ["b", "f"],
+      ["c", "f"],
+      ["d", "e"],
+      ["e", "f"],
+    ],
+  );
+  assert.deepEqual(preset.graph.initialPartition, [0, 0, 0, 1, 1, 1]);
+});
+
+test("BT4 preset matches the reference hypergraph", () => {
+  const preset = PRESETS.find((item) => item.id === "bt4");
+  assert.ok(preset, "BT4 preset should exist");
+  assert.equal(preset.graph.name, "Reference hypergraph");
+  assert.deepEqual(
+    preset.graph.nodes.map((node) => node.id),
+    "abcdefghi".split(""),
+  );
+  assert.deepEqual(
+    preset.graph.nets.map((net) => [net.id, net.label, net.cells]),
+    [
+      ["N1", "N1", ["a", "b", "c", "d"]],
+      ["N2", "N2", ["e", "f", "g"]],
+      ["N3", "N3", ["h", "d", "i"]],
+    ],
+  );
+  assert.deepEqual(preset.graph.initialPartition, [0, 0, 1, 1, 0, 0, 0, 0, 1]);
 });
 
 test("every FM move gain exactly equals the cut reduction", () => {
@@ -173,6 +329,17 @@ test("balance bounds and bookkeeping remain valid during every pass", () => {
   for (const preset of PRESETS) {
     for (const slack of [0, 1, 2]) {
       const engine = new FMEngine(preset.graph, { slack });
+      // A demo may start deliberately unbalanced. Bounds are checked once the
+      // starting partition is inside the configured range; slack 0 cannot
+      // retrofit the 6/3 critical example.
+      if (
+        engine.blockSizes[0] < engine.minSize ||
+        engine.blockSizes[1] < engine.minSize ||
+        engine.blockSizes[0] > engine.maxSize ||
+        engine.blockSizes[1] > engine.maxSize
+      ) {
+        continue;
+      }
       let guard = 0;
       while (engine.status !== STATUS.DONE && guard < 1500) {
         const event = engine.advance();
@@ -242,6 +409,11 @@ test("accepted cuts are monotone and the preset solutions are stable", () => {
     ["signal", { cut: 5, sizes: [7, 5], passes: 2 }],
     ["clusters", { cut: 3, sizes: [4, 4], passes: 2 }],
     ["grid", { cut: 3, sizes: [6, 6], passes: 2 }],
+    ["critical", { cut: 0, sizes: [3, 6], passes: 2 }],
+    ["bt1", { cut: 3, sizes: [4, 4], passes: 1 }],
+    ["bt2", { cut: 2, sizes: [3, 3], passes: 2 }],
+    ["bt4", { cut: 0, sizes: [3, 6], passes: 2 }],
+    ["kl-example", { cut: 1, sizes: [4, 4], passes: 2 }],
   ]);
 
   for (const preset of PRESETS) {

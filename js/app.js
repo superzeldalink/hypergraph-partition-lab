@@ -1,7 +1,14 @@
 (() => {
   "use strict";
 
-  const { FMEngine, STATUS, balancedSplit } = window.FMCore;
+  const {
+    FMEngine,
+    STATUS,
+    balancedSplit,
+    netCriticality,
+    criticalSidesForCounts,
+  } = window.FMCore;
+  const { KLEngine } = window.KLCore;
   const { PRESETS, getPreset, makeRandomGraph, mulberry32, randomSeed } = window.FMPresets;
 
   const SVG_NS = "http://www.w3.org/2000/svg";
@@ -43,6 +50,8 @@
     cutValue: document.getElementById("cutValue"),
     cutDelta: document.getElementById("cutDelta"),
     criticalSummary: document.getElementById("criticalSummary"),
+    criticalCount: document.getElementById("criticalCount"),
+    criticalBreakdown: document.getElementById("criticalBreakdown"),
     countA: document.getElementById("countA"),
     countB: document.getElementById("countB"),
     capNote: document.getElementById("capNote"),
@@ -61,6 +70,7 @@
     blockBKicker: document.getElementById("blockBKicker"),
     cutFlag: document.getElementById("cutFlag"),
     edgesLayer: document.getElementById("edgesLayer"),
+    netLabelsLayer: document.getElementById("netLabelsLayer"),
     editorLayer: document.getElementById("editorLayer"),
     nodesLayer: document.getElementById("nodesLayer"),
     nextStep: document.getElementById("nextStep"),
@@ -69,24 +79,30 @@
     playLabel: document.getElementById("playLabel"),
     stepBtn: document.getElementById("stepBtn"),
     passBtn: document.getElementById("passBtn"),
+    algorithmFM: document.getElementById("algorithmFM"),
+    algorithmKL: document.getElementById("algorithmKL"),
+    algorithmOptions: Array.from(document.querySelectorAll(".algorithm-option")),
     resetBtn: document.getElementById("resetBtn"),
     resplitBtn: document.getElementById("resplitBtn"),
     speedRange: document.getElementById("speedRange"),
     speedOut: document.getElementById("speedOut"),
     slackRange: document.getElementById("slackRange"),
     slackOut: document.getElementById("slackOut"),
+    slackLabel: document.getElementById("slackLabel"),
     slackHelp: document.getElementById("slackHelp"),
     metricCut: document.getElementById("metricCut"),
     metricImprovement: document.getElementById("metricImprovement"),
     metricPass: document.getElementById("metricPass"),
     metricPassState: document.getElementById("metricPassState"),
     metricKept: document.getElementById("metricKept"),
+    metricMovesLabel: document.getElementById("metricMovesLabel"),
     metricAttempted: document.getElementById("metricAttempted"),
     metricGain: document.getElementById("metricGain"),
     metricBestPrefix: document.getElementById("metricBestPrefix"),
     inspectorHint: document.getElementById("inspectorHint"),
     inspectorBody: document.getElementById("inspectorBody"),
     tabPanel: document.getElementById("tabPanel"),
+    tabGains: document.getElementById("tab-gains"),
     tabs: Array.from(document.querySelectorAll(".tab")),
     toast: document.getElementById("toast"),
     svgDesc: document.getElementById("svgDesc"),
@@ -95,6 +111,7 @@
   const state = {
     engine: null,
     graph: null,
+    algorithm: "KL",
     presetId: "signal",
     currentSeed: null,
     selectedId: null,
@@ -153,6 +170,15 @@
     return side === 0 ? "Block A" : "Block B";
   }
 
+  function netDisplayName(net) {
+    return String(net.label || net.id);
+  }
+
+  function boardNetName(net) {
+    const name = netDisplayName(net);
+    return name.length > 15 ? `${name.slice(0, 14)}…` : name;
+  }
+
   function svgElement(tag, attributes = {}) {
     const element = document.createElementNS(SVG_NS, tag);
     Object.entries(attributes).forEach(([key, value]) => {
@@ -175,31 +201,42 @@
   }
 
   function queueLabel(details) {
+    if (details.algorithm === "KL") return details.locked ? "fixed" : "free";
     return details.locked ? "locked" : "unlocked";
   }
 
   function netStateBadge(net) {
-    const criticalForCell = Boolean(net.criticalForCell);
-    const state = criticalForCell ? "critical" : net.cut ? "cut" : "internal";
-    const classes = [
-      "net-state",
-      criticalForCell ? "is-critical" : net.cut ? "is-cut" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const countsText = `A ${net.counts[0]} · B ${net.counts[1]}.`;
     const criticalSides = [0, 1]
       .filter((side) => net.criticalSides && net.criticalSides[side])
       .map(blockName);
-    let detail = "Internal net; every cell is in the same block.";
-    if (net.cut) {
-      detail = `A ${net.counts[0]} · B ${net.counts[1]}.`;
-      if (criticalForCell) {
-        detail += " Critical for this cell: moving it closes the net.";
-      } else if (criticalSides.length) {
-        detail += ` Critical for block ${criticalSides.join(" and ")}.`;
-      }
+    let state = "internal";
+    let classes = "net-state";
+    let detail = `${countsText} Internal net; no single-cell move changes its cut status.`;
+
+    if (net.criticalType === "cut") {
+      state = "close";
+      classes += " is-critical is-cut-critical";
+      detail =
+        criticalSides.length > 1
+          ? `${countsText} Cut-critical: both blocks hold one cell; moving either one closes the net (FS).`
+          : `${countsText} Cut-critical: the lone Block ${criticalSides[0]} cell can close the net by moving (FS).`;
+      if (net.criticalForCell) detail += " This cell is that lone cell.";
+      else detail += " This cell is not the lone cell.";
+    } else if (net.criticalType === "uncut") {
+      state = "open";
+      classes += " is-critical is-uncut-critical";
+      detail = `${countsText} Uncut-critical: moving a cell in Block ${criticalSides[0]} across cuts the net (TE).`;
+      if (net.criticalForCell) detail += " This cell can open it.";
+    } else if (net.cut) {
+      state = "cut";
+      classes += " is-cut";
+      detail = `${countsText} Cut, but no single-cell move changes its status.`;
     }
-    return `<span class="${classes}" title="${escapeHtml(`${net.id}: ${detail}`)}">${state}</span>`;
+
+    return `<span class="${classes}" title="${escapeHtml(
+      `${netDisplayName(net)}: ${detail}`,
+    )}">${state}</span>`;
   }
 
   function clampNumber(value, min, max) {
@@ -253,12 +290,20 @@
     });
   }
 
+  function createEngine(graph, options = {}) {
+    const slack = Number.isFinite(Number(options.slack))
+      ? Number(options.slack)
+      : Number(el.slackRange.value);
+    if (state.algorithm === "KL") {
+      return new KLEngine(graph, options);
+    }
+    return new FMEngine(graph, { ...options, slack });
+  }
+
   function syncEngineFromGraph({ animate = false, preserveSelection = true } = {}) {
     const selectedId = preserveSelection ? state.selectedId : null;
     const selectedNetId = preserveSelection ? state.selectedNetId : null;
-    state.engine = new FMEngine(state.graph, {
-      slack: Number(el.slackRange.value),
-    });
+    state.engine = createEngine(state.graph);
     ensureGraphLayout();
     state.selectedId = state.engine.indexOf.has(String(selectedId)) ? selectedId : null;
     state.selectedNetId = state.engine.nets.some((net) => net.id === selectedNetId)
@@ -284,9 +329,7 @@
     state.connectIds = [];
     state.connectPointer = null;
     state.selectedNetId = null;
-    state.engine = new FMEngine(state.graph, {
-      slack: Number(el.slackRange.value),
-    });
+    state.engine = createEngine(state.graph);
     ensureGraphLayout();
     if (state.selectedId && !state.engine.indexOf.has(String(state.selectedId))) {
       state.selectedId = null;
@@ -397,9 +440,7 @@
     state.selectedId = null;
     state.selectedNetId = null;
     state.lastEvent = null;
-    state.engine = new FMEngine(state.graph, {
-      slack: Number(el.slackRange.value),
-    });
+    state.engine = createEngine(state.graph);
     state.graph.initialPartition = state.engine.initialSides.slice();
     ensureGraphLayout();
     buildScene();
@@ -416,9 +457,7 @@
     state.selectedId = null;
     state.selectedNetId = null;
     state.lastEvent = null;
-    state.engine = new FMEngine(state.graph, {
-      slack: Number(el.slackRange.value),
-    });
+    state.engine = createEngine(state.graph);
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: false });
@@ -485,9 +524,9 @@
         throw new Error("The graph needs a non-empty nodes array.");
       }
       if (!Array.isArray(parsed.nets) && !Array.isArray(parsed.edges)) {
-        throw new Error("The graph needs a nets array.");
+        throw new Error("The graph needs a nets or edges array.");
       }
-      const temp = new FMEngine(parsed, { slack: Number(el.slackRange.value) });
+      const temp = createEngine(parsed);
       if (temp.nets.length === 0) {
         throw new Error("Add at least one net with two or more valid cell IDs.");
       }
@@ -598,6 +637,7 @@
     state.positions.clear();
     state.previewPath = null;
     el.edgesLayer.replaceChildren();
+    el.netLabelsLayer.replaceChildren();
     el.editorLayer.replaceChildren();
     el.nodesLayer.replaceChildren();
 
@@ -644,6 +684,12 @@
       const group = svgElement("g", { class: "net-group" });
       const title = svgElement("title");
       group.appendChild(title);
+      const label = svgElement("text", {
+        class: "net-label is-visible",
+        "aria-hidden": "true",
+      });
+      label.textContent = boardNetName(net);
+      el.netLabelsLayer.appendChild(label);
 
       if (net.cells.length === 2) {
         const path = svgElement("path", {
@@ -663,6 +709,7 @@
           netIndex,
           group,
           title,
+          label,
           twoTerminal: true,
           paths: [path],
           hitPaths: [hit],
@@ -710,6 +757,7 @@
           netIndex,
           group,
           title,
+          label,
           twoTerminal: false,
           paths,
           hitPaths: hits,
@@ -989,10 +1037,32 @@
       });
       cut = hasA && hasB;
       const incident = selectedNets.has(netIndex);
+      const counts = state.engine.netCounts[netIndex];
+      const info = netCriticality(counts);
+      const critical = info.critical;
+      const criticalSides = [0, 1]
+        .filter((side) => criticalSidesForCounts(counts)[side])
+        .map(blockName);
+      let stateLabel = "internal";
+      if (info.cutCritical) {
+        stateLabel =
+          counts[0] === 1 && counts[1] === 1
+            ? "cut-critical in both blocks"
+            : `cut-critical in Block ${criticalSides[0]}`;
+      } else if (info.uncutCritical) {
+        stateLabel = `uncut-critical in Block ${criticalSides[0]}`;
+      } else if (cut) {
+        stateLabel = "cut, not critical";
+      }
 
-      edge.title.textContent = `${net.label} · ${labels.join(" / ")} · ${
-        cut ? "cut" : "internal"
-      }`;
+      edge.group.classList.toggle("is-critical-net", critical);
+      edge.title.textContent = `${netDisplayName(net)}${
+        net.label !== net.id ? ` · ${net.id}` : ""
+      } · ${labels.join(" / ")} · ${stateLabel} · A ${counts[0]} / B ${counts[1]}`;
+      edge.label.textContent = boardNetName(net);
+      edge.label.classList.toggle("is-critical-label", critical);
+      edge.label.classList.toggle("is-noncritical-label", !critical);
+      edge.label.classList.toggle("is-selected", netSelected);
 
       if (edge.twoTerminal) {
         const first = state.engine.nodes[net.cells[0]];
@@ -1024,6 +1094,11 @@
         path.setAttribute("d", pathData);
         path.classList.toggle("is-cut", cut);
         path.classList.toggle("is-incident", incident);
+        const labelX = 0.25 * p1.x + 0.5 * controlX + 0.25 * p2.x;
+        const labelY = 0.25 * p1.y + 0.5 * controlY + 0.25 * p2.y;
+        edge.label.setAttribute("x", labelX.toFixed(2));
+        edge.label.setAttribute("y", (labelY - 7).toFixed(2));
+        edge.label.setAttribute("text-anchor", "middle");
         if (edge.hitPaths[0]) edge.hitPaths[0].setAttribute("d", pathData);
       } else {
         const points = net.cells
@@ -1051,6 +1126,13 @@
         edge.hub.setAttribute("transform", `translate(${hubX.toFixed(2)} ${hubY.toFixed(2)}) rotate(45)`);
         edge.hub.classList.toggle("is-cut", cut);
         edge.hub.classList.toggle("is-incident", incident);
+        const labelRight = hubX > state.layout.viewWidth - 76;
+        edge.label.setAttribute(
+          "x",
+          (hubX + (labelRight ? -10 : 10)).toFixed(2),
+        );
+        edge.label.setAttribute("y", (hubY - 8).toFixed(2));
+        edge.label.setAttribute("text-anchor", labelRight ? "end" : "start");
         if (edge.hitHub) {
           edge.hitHub.setAttribute(
             "transform",
@@ -1059,7 +1141,86 @@
         }
       }
     });
+    layoutNetLabels();
     drawConnectPreview();
+  }
+
+  function layoutNetLabels() {
+    const focusedNetId = state.editing ? state.selectedNetId : null;
+    const visible = state.edgeEls
+      .filter(
+        (edge) =>
+          edge.label.classList.contains("is-visible") &&
+          (!focusedNetId || edge.net.id === focusedNetId),
+      )
+      .map((edge) => {
+        const label = edge.label;
+        const x = Number(label.getAttribute("x"));
+        const y = Number(label.getAttribute("y"));
+        const anchor = label.getAttribute("text-anchor") || "start";
+        let box;
+        try {
+          box = label.getBBox();
+        } catch (error) {
+          box = { width: label.textContent.length * 7, height: 12 };
+        }
+        return {
+          label,
+          x,
+          y,
+          anchor,
+          width: box.width,
+          height: box.height,
+        };
+      })
+      .filter((item) => Number.isFinite(item.x) && Number.isFinite(item.y));
+
+    if (visible.length < 2) return;
+
+    visible.sort((a, b) => a.y - b.y || a.x - b.x);
+    const step = Math.max(14, Math.max(...visible.map((item) => item.height), 0) + 4);
+    const placed = [];
+    const boundsTop = 84;
+    const boundsBottom = 610;
+
+    const rectFor = (item, y) => {
+      const left =
+        item.anchor === "middle"
+          ? item.x - item.width / 2
+          : item.anchor === "end"
+            ? item.x - item.width
+            : item.x;
+      return {
+        left: left - 2,
+        right: left + item.width + 2,
+        top: y - item.height - 2,
+        bottom: y + 3,
+      };
+    };
+    const overlaps = (a, b) =>
+      a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+    visible.forEach((item) => {
+      const offsets = [0];
+      for (let ring = 1; ring <= 9; ring += 1) {
+        offsets.push(step * ring, -step * ring);
+      }
+      let chosen = null;
+      for (const offset of offsets) {
+        const y = clampNumber(item.y + offset, boundsTop + item.height, boundsBottom);
+        const rect = rectFor(item, y);
+        if (!placed.some((other) => overlaps(rect, other))) {
+          chosen = { y, rect };
+          break;
+        }
+      }
+      if (!chosen) {
+        const y = clampNumber(item.y, boundsTop + item.height, boundsBottom);
+        chosen = { y, rect: rectFor(item, y) };
+      }
+      item.label.setAttribute("y", chosen.y.toFixed(2));
+      placed.push(chosen.rect);
+    });
   }
 
   function drawConnectPreview() {
@@ -1151,7 +1312,7 @@
     const tips = {
       select: "Drag cells · double-click a name to rename · drag across the cut to change start block",
       add: "Click empty canvas to drop a new cell · press V to select",
-      connect: "Click cells in order · press Enter or Create net when finished",
+      connect: "Click cells in order · Enter creates the net and keeps Connect active · Esc to finish",
     };
     el.editorTip.textContent = tips[state.tool] || tips.select;
 
@@ -1252,12 +1413,11 @@
     state.graph.nets.push({ id, label: id, cells });
     state.selectedId = null;
     state.selectedNetId = id;
-    state.tool = "select";
     state.connectIds = [];
     state.connectPointer = null;
     updateGraphSource();
     syncEngineFromGraph({ preserveSelection: true });
-    showToast(`Created net ${id} · ${cells.length} cells`);
+    showToast(`Created net ${id} · ${cells.length} cells · still connecting`);
   }
 
   function enterEditMode() {
@@ -1275,7 +1435,7 @@
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: true });
-    showToast("Graph editor on · changes restart the FM run");
+    showToast(`Graph editor on · changes restart the ${state.algorithm} run`);
   }
 
   function exitEditMode() {
@@ -1291,13 +1451,11 @@
     state.connectPointer = null;
     state.selectedNetId = null;
     state.drag = null;
-    state.engine = new FMEngine(state.graph, {
-      slack: Number(el.slackRange.value),
-    });
+    state.engine = createEngine(state.graph);
     ensureGraphLayout();
     buildScene();
     renderAll({ animate: true });
-    showToast("Editor closed · FM run reset");
+    showToast(`Editor closed · ${state.algorithm} run reset`);
   }
 
   function addCellAt(x, y) {
@@ -1697,13 +1855,20 @@
     updateInspector();
     renderTab();
     renderSliderLabels();
+    updateAlgorithmUI();
     updateEditorUI();
 
     el.svgDesc.textContent = state.editing
       ? `Graph editor with ${state.engine.nodes.length} cells and ${state.engine.nets.length} nets. Drag cells, add or connect cells, or rename a cell.`
       : `Partition with ${state.engine.blockSizes[0]} cells in block A and ${
           state.engine.blockSizes[1]
-        } in block B. ${state.engine.cut} nets cross the cut.`;
+        } in block B. ${state.engine.cut} nets cross the cut. ${
+          state.engine.getMetrics().criticalNets
+        } nets are critical: ${
+          state.engine.getMetrics().cutCriticalNets
+        } cut-critical and ${
+          state.engine.getMetrics().uncutCriticalNets
+        } uncut-critical. Critical net names are amber; other net names are steel blue.`;
   }
 
   function renderGraphHeader() {
@@ -1712,8 +1877,11 @@
     el.graphTitle.textContent = graph.name || "Untitled hypergraph";
     el.graphTitle.title = graph.description || "";
     const seedText = state.currentSeed ? ` · seed ${state.currentSeed}` : "";
-    const slackText = ` · cap ${metrics.maxSize}`;
-    el.graphMeta.textContent = `${graph.nodes.length} cells · ${graph.nets.length} nets${slackText}${seedText}`;
+    const balanceText =
+      metrics.algorithm === "KL"
+        ? ` · fixed ${metrics.blockSizes[0]}/${metrics.blockSizes[1]}`
+        : ` · cap ${metrics.maxSize}`;
+    el.graphMeta.textContent = `${graph.nodes.length} cells · ${graph.nets.length} nets${balanceText}${seedText}`;
   }
 
   function renderSceneState() {
@@ -1723,6 +1891,15 @@
     const active = engine.status === STATUS.ACTIVE && !state.editing;
     const connecting = state.editing && state.tool === "connect";
     const connectSet = new Set(state.connectIds.map(String));
+    const candidateIds = new Set();
+    if (candidate) {
+      if (candidate.type === "swap") {
+        candidateIds.add(candidate.a.nodeId);
+        candidateIds.add(candidate.b.nodeId);
+      } else {
+        candidateIds.add(candidate.nodeId);
+      }
+    }
 
     el.graphSvg.classList.toggle("show-gains", active);
 
@@ -1730,7 +1907,7 @@
       const entry = state.nodeEls.get(node.id);
       if (!entry) return;
       const isSelected = state.selectedId === node.id;
-      const isCandidate = Boolean(candidate && candidate.nodeId === node.id);
+      const isCandidate = candidateIds.has(node.id);
       entry.group.classList.toggle("block-a", node.side === 0);
       entry.group.classList.toggle("block-b", node.side === 1);
       entry.group.classList.toggle("is-locked", node.locked);
@@ -1745,15 +1922,25 @@
         node.gain > 0 ? "is-positive" : node.gain < 0 ? "is-negative" : "is-zero";
       entry.gainGroup.classList.remove("is-positive", "is-negative", "is-zero");
       entry.gainGroup.classList.add(gainClass);
-      entry.gainText.textContent = signed(node.gain);
+      entry.gainText.textContent =
+        engine.algorithm === "KL" ? `D${signed(node.gain)}` : signed(node.gain);
 
+      const scoreName = engine.algorithm === "KL" ? "D" : "gain";
+      const lockedName =
+        engine.algorithm === "KL"
+          ? node.locked
+            ? "fixed"
+            : "free"
+          : node.locked
+            ? "locked"
+            : "unlocked";
       entry.group.setAttribute(
         "aria-label",
         state.editing
           ? `Cell ${node.label}, starts in ${blockWord(node.side)}. Drag to move, double-click to rename.`
-          : `Cell ${node.label}, ${blockWord(node.side)}, gain ${signed(node.gain)}, ${
-              node.locked ? "locked" : "unlocked"
-            }. Select to inspect.`,
+          : `Cell ${node.label}, ${blockWord(node.side)}, ${scoreName} ${signed(
+              node.gain,
+            )}, ${lockedName}. Select to inspect.`,
       );
       entry.group.setAttribute(
         "aria-pressed",
@@ -1761,9 +1948,9 @@
       );
       entry.title.textContent = state.editing
         ? `Cell ${node.label} · drag to move · double-click to rename`
-        : `Cell ${node.label} · ${blockWord(node.side)} · gain ${signed(node.gain)}${
-            node.locked ? " · locked" : ""
-          }`;
+        : `Cell ${node.label} · ${blockWord(node.side)} · ${scoreName} ${signed(
+            node.gain,
+          )}${node.locked ? ` · ${lockedName}` : ""}`;
     });
   }
 
@@ -1780,9 +1967,14 @@
     el.countB.textContent = sizeB;
     el.blockACountLabel.textContent = `${sizeA} ${sizeA === 1 ? "cell" : "cells"}`;
     el.blockBCountLabel.textContent = `${sizeB} ${sizeB === 1 ? "cell" : "cells"}`;
-    el.capNote.textContent = `cap ${metrics.maxSize} / block`;
+    const kl = metrics.algorithm === "KL";
+    el.capNote.textContent = kl
+      ? `fixed ${sizeA} / ${sizeB}`
+      : `cap ${metrics.maxSize} / block`;
     el.balanceA.style.width = `${percentA}%`;
     el.balanceB.style.width = `${percentB}%`;
+    el.capMarkerLeft.style.display = kl ? "none" : "";
+    el.capMarkerRight.style.display = kl ? "none" : "";
     el.capMarkerLeft.style.left = `${markerLeft}%`;
     el.capMarkerRight.style.left = `${markerRight}%`;
     el.capMarkerLeft.title = `Maximum block size: ${metrics.maxSize} cells`;
@@ -1796,20 +1988,43 @@
       el.cutDelta.textContent = `start ${metrics.initialCut}`;
       el.cutDelta.classList.remove("is-good");
     }
-    let criticalText = "no cut nets";
-    let criticalLabel = "No cut nets.";
-    if (metrics.cut > 0) {
-      if (metrics.criticalNets === metrics.cut) {
-        criticalText = `all ${metrics.cut} critical`;
-        criticalLabel = `All ${metrics.cut} cut nets are critical.`;
-      } else {
-        criticalText = `${metrics.criticalNets} of ${metrics.cut} critical`;
-        criticalLabel = `${metrics.criticalNets} of ${metrics.cut} cut nets are critical.`;
-      }
+    const critical = state.engine.getCriticalNets();
+    const criticalTotal = metrics.criticalNets;
+    const breakdown = [];
+    if (metrics.cutCriticalNets > 0) {
+      breakdown.push(`${metrics.cutCriticalNets} cut-critical`);
     }
-    el.criticalSummary.textContent = criticalText;
+    if (metrics.uncutCriticalNets > 0) {
+      breakdown.push(`${metrics.uncutCriticalNets} uncut-critical`);
+    }
+    el.criticalCount.textContent = `${criticalTotal} critical ${
+      criticalTotal === 1 ? "net" : "nets"
+    }`;
+    el.criticalBreakdown.textContent = breakdown.length
+      ? breakdown.join(" · ")
+      : "none";
+    el.criticalBreakdown.classList.toggle(
+      "has-critical",
+      criticalTotal > 0,
+    );
+
+    const criticalNames = critical.all.map(
+      (net) =>
+        `${net.label || net.id} (${
+          net.type === "cut" ? "cut-critical" : "uncut-critical"
+        })`,
+    );
+    const criticalDefinition =
+      "A net is critical when moving one cell can change whether it is cut: A=0, A=1, B=0, or B=1. Cut-critical nets are cut and one move can uncut them; uncut-critical nets are internal and one move can cut them.";
+    const criticalLabel = criticalTotal
+      ? `${criticalTotal} critical ${criticalTotal === 1 ? "net" : "nets"}: ${metrics.cutCriticalNets} cut-critical, ${metrics.uncutCriticalNets} uncut-critical.`
+      : "No critical nets.";
     el.criticalSummary.setAttribute("aria-label", criticalLabel);
-    el.criticalSummary.classList.toggle("has-critical", metrics.criticalNets > 0);
+    el.criticalSummary.title = criticalTotal
+      ? `Critical nets: ${criticalNames.join(", ")}. ${criticalDefinition}`
+      : `No critical nets. ${criticalDefinition}`;
+    el.criticalBreakdown.title = el.criticalSummary.title;
+    el.criticalSummary.classList.toggle("has-critical", criticalTotal > 0);
 
     const statusClass = state.editing
       ? "is-editing"
@@ -1827,10 +2042,18 @@
     } else if (metrics.status === STATUS.READY) {
       el.statusText.textContent = "Ready";
     } else if (metrics.status === STATUS.ACTIVE) {
+      const kl = state.engine.algorithm === "KL";
+      const unit = kl
+        ? metrics.passMoves === 1
+          ? "swap"
+          : "swaps"
+        : metrics.passMoves === 1
+          ? "move"
+          : "moves";
       el.statusText.textContent =
         metrics.passMoves === 0
-          ? `Pass ${metrics.pass} · gains`
-          : `Pass ${metrics.pass} · ${metrics.passMoves} ${metrics.passMoves === 1 ? "move" : "moves"}`;
+          ? `Pass ${metrics.pass} · ${kl ? "D scores" : "gains"}`
+          : `Pass ${metrics.pass} · ${metrics.passMoves} ${unit}`;
     } else if (metrics.status === STATUS.BETWEEN) {
       el.statusText.textContent = `Pass ${metrics.pass} · improved`;
     } else {
@@ -1871,6 +2094,7 @@
 
   function renderTransport() {
     const done = state.engine.status === STATUS.DONE;
+    const kl = state.engine.algorithm === "KL";
     el.playLabel.textContent = state.playing ? "Pause" : done ? "Replay" : "Play";
     el.playBtn.classList.toggle("is-playing", state.playing);
     el.stepBtn.disabled = state.editing || state.playing || done;
@@ -1878,7 +2102,7 @@
     el.playBtn.disabled = state.editing;
     el.resetBtn.disabled = state.editing;
     el.resplitBtn.disabled = state.editing;
-    el.slackRange.disabled = state.editing;
+    el.slackRange.disabled = state.editing || kl;
     el.playBtn.title = state.editing
       ? "Finish editing to run the solver"
       : state.playing
@@ -1886,6 +2110,54 @@
         : done
           ? "Replay run (Space)"
           : "Play (Space)";
+  }
+
+  function updateAlgorithmUI() {
+    const kl = state.engine?.algorithm === "KL" || state.algorithm === "KL";
+    el.algorithmOptions.forEach((button) => {
+      const active = button.dataset.algorithm === state.algorithm;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.disabled = state.editing;
+    });
+    el.tabGains.textContent = kl ? "Pair queue" : "Gain queue";
+    el.metricMovesLabel.textContent = kl ? "Kept swaps" : "Kept moves";
+    const phaseNames = kl
+      ? ["Split", "Compute D", "Best pair", "Swap & lock", "Update D", "Best prefix"]
+      : ["Split", "Gain buckets", "Pick best", "Move & lock", "Update gains", "Best prefix"];
+    phaseEls.forEach((phase, index) => {
+      const label = phase.querySelector("span:last-child");
+      if (label) label.textContent = phaseNames[index];
+    });
+    el.slackRange.disabled = state.editing || kl;
+    if (kl) {
+      el.slackOut.textContent = "fixed";
+      el.slackHelp.textContent =
+        "KL swaps keep the starting block sizes; block counts do not change.";
+    }
+  }
+
+  function setAlgorithm(algorithm) {
+    if (!["FM", "KL"].includes(algorithm) || state.algorithm === algorithm) return;
+    if (state.editing) {
+      showToast("Finish editing before switching algorithms");
+      return;
+    }
+    stopPlayback();
+    state.algorithm = algorithm;
+    state.engine = createEngine(state.graph);
+    state.selectedId = null;
+    state.selectedNetId = null;
+    state.lastEvent = null;
+    state.playing = false;
+    ensureGraphLayout();
+    buildScene();
+    renderAll({ animate: false });
+    showToast(
+      algorithm === "KL"
+        ? "KL mode · swap one cell from each block"
+        : "FM mode · move one cell at a time",
+    );
   }
 
   function renderNextStep(candidate) {
@@ -1904,11 +2176,26 @@
       return;
     }
 
+    const kl = engine.algorithm === "KL";
     if (metrics.status === STATUS.READY) {
-      html = `Press <strong>Step</strong> to compute gains for pass 1.`;
+      html = kl
+        ? `Press <strong>Step</strong> to compute <code>D(v)</code> and the pair queue for pass 1.`
+        : `Press <strong>Step</strong> to compute gains for pass 1.`;
     } else if (metrics.status === STATUS.ACTIVE) {
       if (!candidate) {
-        html = `All eligible cells are locked. Next step closes the pass and restores its best prefix.`;
+        html = kl
+          ? `Every cell is fixed or one block has no free cell. Next step closes the pass and restores its best prefix.`
+          : `All eligible cells are locked. Next step closes the pass and restores its best prefix.`;
+      } else if (kl) {
+        const pairText = `<strong>${escapeHtml(candidate.a.label)} ↔ ${escapeHtml(
+          candidate.b.label,
+        )}</strong> (${signed(candidate.gain)})`;
+        html =
+          metrics.passMoves === 0
+            ? `${engine.nodes.length} free cells scored. Next swap: ${pairText} · ${blockName(
+                candidate.a.from,
+              )} ↔ ${blockName(candidate.b.from)}.`
+            : `Next swap: ${pairText} · cut ${metrics.cut}.`;
       } else if (metrics.passMoves === 0) {
         html = `${engine.nodes.length} gains computed. Next: <strong>${escapeHtml(
           candidate.label,
@@ -1949,8 +2236,8 @@
         active = 5;
         [0, 1, 2, 3, 4].forEach((index) => complete.add(index));
       } else if (!madeMove) {
-        active = 1;
-        complete.add(0);
+        active = 2;
+        [0, 1].forEach((index) => complete.add(index));
       } else {
         active = 2;
         [0, 1, 3, 4].forEach((index) => complete.add(index));
@@ -1971,6 +2258,13 @@
   function renderSliderLabels() {
     el.speedOut.textContent = `${state.speed.toFixed(1)}×`;
     const metrics = state.engine.getMetrics();
+    el.slackLabel.textContent = metrics.algorithm === "KL" ? "Block sizes" : "Balance slack";
+    if (metrics.algorithm === "KL") {
+      el.slackOut.textContent = "fixed";
+      el.slackHelp.textContent =
+        "KL swaps keep the starting block sizes; block counts do not change.";
+      return;
+    }
     el.slackOut.textContent =
       metrics.slack === 0 ? "0 cells" : `+${metrics.slack} ${metrics.slack === 1 ? "cell" : "cells"}`;
     const count = state.graph.nodes.length;
@@ -1998,7 +2292,7 @@
       el.inspectorBody.innerHTML = `
         <div class="empty-state">
           <span class="empty-glyph" aria-hidden="true">⌖</span>
-          <p>Select any cell to see its gain breakdown and incident nets.</p>
+          <p>Select any cell to see its score breakdown and incident nets.</p>
         </div>`;
       return;
     }
@@ -2011,15 +2305,37 @@
     }
 
     el.inspectorHint.textContent = queueLabel(details);
+    const kl = details.algorithm === "KL";
     const gainClass =
       details.gain > 0 ? "positive" : details.gain < 0 ? "negative" : "";
     const sideClass = details.side === 1 ? " is-b" : "";
+    const bestSwap = details.bestSwap;
+    const klActive = state.engine.status === STATUS.ACTIVE;
+    const swapNote = kl
+      ? `<div class="kl-swap-note">${
+          !klActive
+            ? state.engine.status === STATUS.DONE
+              ? "Run complete. Reset to inspect swap candidates again."
+              : "Start a pass to compute D(v) and the free swap pairs."
+            : details.locked
+              ? "Fixed for this pass. It becomes available again at the next pass boundary."
+              : bestSwap
+                ? `Best free swap: <strong>${escapeHtml(
+                    bestSwap.a.nodeId === details.id
+                      ? bestSwap.b.label
+                      : bestSwap.a.label,
+                  )}</strong> (${signed(bestSwap.gain)}) · cut ${bestSwap.cutBefore}→${bestSwap.cutAfter}.`
+                : "No free partner in the other block."
+        }</div>`
+      : "";
     const netRows = details.incidentNets.length
       ? details.incidentNets
           .map(
             (net) => `
             <div class="net-row">
-              <span class="net-id">${escapeHtml(net.id)}</span>
+              <span class="net-id" title="${escapeHtml(net.id)}">${escapeHtml(
+                netDisplayName(net),
+              )}</span>
               <span class="net-cells">${net.cells.map(escapeHtml).join(" · ")}</span>
               ${netStateBadge(net)}
             </div>`,
@@ -2037,21 +2353,28 @@
           </div>
           <div class="inspector-sub">
             <span class="lock-state ${details.locked ? "is-locked" : ""}">${
-              details.locked ? "Locked for this pass" : "Unlocked"
+              kl
+                ? details.locked
+                  ? "Fixed for this pass"
+                  : "Free to swap"
+                : details.locked
+                  ? "Locked for this pass"
+                  : "Unlocked"
             }</span> · ${details.cutNets} incident cut ${details.cutNets === 1 ? "net" : "nets"}
           </div>
         </div>
       </div>
       <div class="inspector-stats">
-        <div class="stat-box"><span>Gain</span><b class="${gainClass}">${signed(details.gain)}</b></div>
+        <div class="stat-box"><span>${kl ? "D(v)" : "Gain"}</span><b class="${gainClass}">${signed(details.gain)}</b></div>
         <div class="stat-box"><span>FS</span><b>${details.fs}</b></div>
         <div class="stat-box"><span>TE</span><b>${details.te}</b></div>
         <div class="stat-box"><span>Block</span><b>${blockName(details.side)}</b></div>
       </div>
+      ${swapNote}
       <div class="net-section-head">
         <span>Incident nets (${details.incidentNets.length})</span>
-        <span class="critical-count${details.fs ? " has-critical" : ""}" title="Nets with exactly one cell on this cell's side; moving this cell would close them.">
-          ${details.fs} critical here
+        <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.">
+          ${details.criticalForCell} critical here
         </span>
       </div>
       <div class="net-list">${netRows}</div>`;
@@ -2067,39 +2390,66 @@
         return;
       }
       const counts = net.counts;
-      const criticalSides = [0, 1]
-        .filter((side) => net.criticalSides[side])
-        .map((side) => ({
-          side,
-          cell: net.cells.find((cell) => cell.side === side),
-        }));
-      const soleCells = criticalSides
-        .map(
-          ({ side, cell }) =>
-            `Only Block ${blockName(side)} cell: <strong>${escapeHtml(cell.label)}</strong>`,
-        )
-        .join(" · ");
-      const criticalCallout = net.critical
-        ? `<div class="critical-callout">
-            <span class="critical-kicker">critical</span>
-            <span>${soleCells}. Moving ${
-              criticalSides.length > 1 ? "either" : "it"
-            } contributes +1 to its gain.</span>
-          </div>`
-        : "";
+      const criticalLabelText = net.cutCritical
+        ? "cut-critical"
+        : net.uncutCritical
+          ? "uncut-critical"
+          : net.cut
+            ? "cut, not critical"
+            : "internal";
+      let criticalCallout = "";
+      if (net.cutCritical) {
+        const loneSides = [0, 1].filter((side) => net.criticalSides[side]);
+        const loneText = loneSides
+          .map((side) => {
+            const cells = net.cells.filter(
+              (cell) => cell.side === side && cell.critical,
+            );
+            return `${cells.map((cell) => escapeHtml(cell.label)).join(", ")} in Block ${blockName(
+              side,
+            )}`;
+          })
+          .join(" · ");
+        criticalCallout = `<div class="critical-callout">
+            <span class="critical-kicker">cut-critical</span>
+            <span>Lone ${loneSides.length > 1 ? "cells" : "cell"}: ${loneText}. Moving ${
+              loneSides.length > 1 ? "either one" : "it"
+            } closes the net and contributes +1 to FS.</span>
+          </div>`;
+      } else if (net.uncutCritical) {
+        const side = net.criticalSides[0] ? 0 : 1;
+        const destination = blockName(1 - side);
+        criticalCallout = `<div class="critical-callout is-uncut">
+            <span class="critical-kicker">uncut-critical</span>
+            <span>All ${net.cells.length} cells are in ${blockWord(
+              side,
+            )}. Moving any one to ${destination} cuts the net and contributes −1 to its gain (TE).</span>
+          </div>`;
+      } else if (net.cut) {
+        criticalCallout = `<div class="critical-callout is-noncritical">
+            <span class="critical-kicker">not critical</span>
+            <span>A ${counts[0]} / B ${counts[1]}. Moving one cell keeps this net cut, so it is neither cut-critical nor uncut-critical.</span>
+          </div>`;
+      }
       const members = net.cells
-        .map(
-          (cell) => `
+        .map((cell) => {
+          let title = `Select ${escapeHtml(cell.label)}`;
+          if (cell.critical && net.cutCritical) {
+            title += ` — lone cell from Block ${blockName(
+              cell.side,
+            )}; moving it closes the net`;
+          } else if (cell.critical && net.uncutCritical) {
+            title += " — moving it would cut this uncut-critical net";
+          }
+          return `
             <button class="net-member${cell.side === 1 ? " is-b" : ""}${
               cell.critical ? " is-critical" : ""
             }" type="button"
               data-edit-action="select-cell" data-cell-id="${escapeHtml(cell.id)}"
-              title="Select ${escapeHtml(cell.label)}${
-                cell.critical ? ` — only cell from Block ${blockName(cell.side)} on this net` : ""
-              }">
+              title="${title}">
               ${escapeHtml(cell.label)}
-            </button>`,
-        )
+            </button>`;
+        })
         .join("");
       el.inspectorHint.textContent = "net selected";
       el.inspectorBody.innerHTML = `
@@ -2114,7 +2464,7 @@
             </label>
             <div class="inspector-sub">
               ${net.cells.length} cells · A ${counts[0]} / B ${counts[1]} ·
-              ${net.critical ? "critical" : net.cut ? "cut" : "internal"}
+              ${criticalLabelText}
             </div>
           </div>
         </div>
@@ -2144,7 +2494,9 @@
               (net) => `
               <button class="net-row net-row-button" type="button"
                 data-edit-action="select-net" data-net-id="${escapeHtml(net.id)}">
-                <span class="net-id">${escapeHtml(net.id)}</span>
+                <span class="net-id" title="${escapeHtml(net.id)}">${escapeHtml(
+                  netDisplayName(net),
+                )}</span>
                 <span class="net-cells">${net.cells.map(escapeHtml).join(" · ")}</span>
                 ${netStateBadge(net)}
               </button>`,
@@ -2180,8 +2532,8 @@
         <div class="edit-note"><strong>Tip:</strong> double-click the cell on the board to rename it. Drag across the cut line to change its starting block.</div>
         <div class="net-section-head">
           <span>Incident nets (${details.incidentNets.length})</span>
-          <span class="critical-count${details.fs ? " has-critical" : ""}" title="Nets with exactly one cell on this cell's side; moving this cell would close them.">
-            ${details.fs} critical here
+          <span class="critical-count${details.criticalForCell ? " has-critical" : ""}" title="Incident nets whose cut status changes if this cell moves. FS nets close; TE nets open.">
+            ${details.criticalForCell} critical here
           </span>
         </div>
         <div class="net-list">${netRows}</div>`;
@@ -2229,14 +2581,14 @@
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
           <b>Graph editor is open</b>
-          <span>Add, rename, move, connect, or delete cells on the board. Finish editing to run FM on the revised graph.</span>
+          <span>Add, rename, move, connect, or delete cells on the board. Finish editing to run ${state.algorithm} on the revised graph.</span>
         </div>`;
       return;
     }
     if (!log.length) {
       el.tabPanel.innerHTML = `
         <div class="tab-empty">
-          <b>No moves yet</b>
+          <b>${state.algorithm === "KL" ? "No swaps yet" : "No moves yet"}</b>
           <span>Press <kbd>S</kbd> or <kbd>Step</kbd> to open pass 1.</span>
         </div>`;
       return;
@@ -2275,15 +2627,47 @@
               <span class="log-cut">${entry.cutBefore}→${entry.cut}</span>
             </div>`;
         }
+        if (entry.type === "swap") {
+          const gainClass =
+            entry.gain > 0 ? "is-positive" : entry.gain < 0 ? "is-negative" : "";
+          const rowClasses = [
+            "log-row",
+            entry.rolledBack ? "is-rolled" : "",
+            entry.becameBest ? "is-best" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return `
+            <div class="${rowClasses}" title="${
+              entry.rolledBack ? "Rolled back at pass end" : "Kept in best prefix"
+            } · ${escapeHtml(entry.a.label)} ${blockName(entry.a.from)}→${blockName(
+              entry.a.to,
+            )}, ${escapeHtml(entry.b.label)} ${blockName(entry.b.from)}→${blockName(
+              entry.b.to,
+            )}">
+              <span class="log-serial">${entry.indexInPass}</span>
+              <span class="log-move">
+                <span class="log-pair">
+                  <span class="log-node">${escapeHtml(entry.a.label)}</span>
+                  <span class="log-route">↔</span>
+                  <span class="log-node">${escapeHtml(entry.b.label)}</span>
+                </span>
+                ${entry.becameBest ? `<span class="log-best-mark">BEST</span>` : ""}
+              </span>
+              <span class="log-gain ${gainClass}">${signed(entry.gain)}</span>
+              <span class="log-cut">${entry.cutBefore}→${entry.cut}</span>
+            </div>`;
+        }
         if (entry.type === "pass-end") {
           const improved = entry.improvement > 0;
           const summaryClass = improved ? "log-summary" : "log-summary is-stalled";
+          const unit = state.algorithm === "KL" ? "swaps" : "moves";
           return `
             <div class="${summaryClass}">
               <strong>Pass ${entry.pass}: cut ${entry.startCut} → ${entry.bestCut}</strong><br>
               ${
                 improved
-                  ? `Kept ${entry.acceptedMoves} of ${entry.attemptedMoves} moves; rolled back ${entry.rolledBack}.`
+                  ? `Kept ${entry.acceptedMoves} of ${entry.attemptedMoves} ${unit}; rolled back ${entry.rolledBack}.`
                   : `No improvement; kept the pass-start partition.`
               }
               <span>${entry.attemptedMoves} attempted</span>
@@ -2297,8 +2681,63 @@
     el.tabPanel.scrollTop = el.tabPanel.scrollHeight;
   }
 
+  function renderPairQueue() {
+    const engine = state.engine;
+    if (engine.status !== STATUS.ACTIVE || state.editing) {
+      const statusText = state.editing
+        ? "Finish editing the graph to compute swap candidates."
+        : engine.status === STATUS.READY
+          ? "Start a pass to compute D(v) and the free pair queue."
+          : engine.status === STATUS.BETWEEN
+            ? "Pass closed. D(v) is recomputed when the next pass starts."
+            : "Run complete. Reset to inspect the first pass again.";
+      el.tabPanel.innerHTML = `<div class="tab-empty"><b>No active pair queue</b><span>${statusText}</span></div>`;
+      return;
+    }
+
+    const queue = engine.getPairQueue(12);
+    if (!queue.length) {
+      el.tabPanel.innerHTML = `
+        <div class="tab-empty">
+          <b>No legal swaps</b>
+          <span>Every cell is fixed or one block has no free cell. Close the pass to keep its best prefix.</span>
+        </div>`;
+      return;
+    }
+
+    const rows = queue
+      .map((pair, index) => {
+        const gainClass =
+          pair.gain > 0 ? "is-positive" : pair.gain < 0 ? "is-negative" : "";
+        return `
+          <div class="queue-row queue-pair-row ${index === 0 ? "is-best" : ""}">
+            <span class="queue-rank">${index + 1}</span>
+            <span class="queue-pair">
+              <span class="queue-orb">${escapeHtml(pair.a.label)}</span>
+              <span class="queue-route">↔</span>
+              <span class="queue-orb is-b">${escapeHtml(pair.b.label)}</span>
+            </span>
+            <span class="queue-move">${blockName(pair.a.from)} ↔ ${blockName(
+              pair.b.from,
+            )} <em>D ${signed(pair.a.d)} / ${signed(pair.b.d)}</em></span>
+            <span class="queue-gain ${gainClass}">${signed(pair.gain)}</span>
+            <span class="queue-cut">${pair.cutBefore}→${pair.cutAfter}</span>
+          </div>`;
+      })
+      .join("");
+
+    el.tabPanel.innerHTML = `
+      <div class="queue-head"><span>Best free swaps</span><span>${engine.blockSizes[0]}/${engine.blockSizes[1]} · fixed</span></div>
+      ${rows}
+      <div class="queue-note">Highest pair gain wins; ties go alphabetically. Both cells lock. Cut effect assumes only this swap; on a hypergraph it is the exact net-cut change.</div>`;
+  }
+
   function renderGainQueue() {
     const engine = state.engine;
+    if (engine.algorithm === "KL") {
+      renderPairQueue();
+      return;
+    }
     if (engine.status !== STATUS.ACTIVE || state.editing) {
       const statusText = state.editing
         ? "Finish editing the graph to compute gains."
@@ -2348,11 +2787,32 @@
   function renderMethod() {
     const engine = state.engine;
     const metrics = engine.getMetrics();
+    if (engine.algorithm === "KL") {
+      el.tabPanel.innerHTML = `
+        <div class="method-content">
+          <h3>D(v) and pair gain</h3>
+          <div class="formula">D(v) = E<sub>other</sub>(v) − E<sub>same</sub>(v)</div>
+          <div class="formula">g(a,b) = D(a) + D(b) − 2c(a,b)</div>
+          <p><code>D(v)</code> is the change from moving one free cell alone; on this board it equals <code>FS − TE</code>. The pair gain is exact for the unit-cost net cut. For two-terminal nets it reduces to the slide's graph formula, where <code>c(a,b)</code> is the shared edge count.</p>
+          <h3>The KL pass</h3>
+          <ul class="method-list">
+            <li>Score every free cell and every legal A↔B pair.</li>
+            <li>Swap the highest-gain pair and lock both cells.</li>
+            <li>Recompute the scores; keep exploring even through negative gains.</li>
+            <li>Remember the prefix with the lowest cut.</li>
+            <li>Roll back to that prefix and unlock all cells; stop if the cut did not improve.</li>
+          </ul>
+          <h3>Balance</h3>
+          <p>KL swaps preserve the starting split: ${metrics.blockSizes[0]} cells in A and ${metrics.blockSizes[1]} in B. Slack is an FM-only control.</p>
+          <p><code>Step</code> advances one swap or opens a pass. <code>Run pass</code> finishes the current pass. <code>Play</code> runs to convergence.</p>
+        </div>`;
+      return;
+    }
     el.tabPanel.innerHTML = `
       <div class="method-content">
         <h3>Gain of a cell</h3>
         <div class="formula">gain(v) = FS(v) − TE(v)</div>
-        <p><code>FS</code> counts nets where <em>v</em> is the only cell on its block. <code>TE</code> counts nets entirely on <em>v</em>'s block. Move gain is the exact cut reduction.</p>
+        <p><code>FS</code> counts cut-critical nets where <em>v</em> is the lone cell on its block; moving closes them. <code>TE</code> counts uncut-critical internal nets on <em>v</em>'s block; moving opens them. A <code>2/2</code> cut net is noncritical. Move gain is the exact cut reduction.</p>
         <h3>The pass</h3>
         <ul class="method-list">
           <li>Compute gains, then take the highest-gain eligible cell.</li>
@@ -2541,6 +3001,10 @@
     }
   });
 
+  el.algorithmOptions.forEach((button) => {
+    button.addEventListener("click", () => setAlgorithm(button.dataset.algorithm));
+  });
+
   el.playBtn.addEventListener("click", () => {
     if (state.playing) stopPlayback();
     else startPlayback("all");
@@ -2557,7 +3021,7 @@
   });
 
   el.slackRange.addEventListener("input", () => {
-    if (!state.engine || state.editing) return;
+    if (!state.engine || state.editing || state.algorithm === "KL") return;
     stopPlayback();
     state.engine.setSlack(Number(el.slackRange.value));
     state.lastEvent = null;
