@@ -2,6 +2,8 @@
 
 An interactive, dependency-free lab for **Fiduccia–Mattheyses (FM)** and **Kernighan–Lin (KL)** partitioning. It runs entirely in the browser, works from `file://`, and exposes every part of each pass: scores, locks, rollback, and convergence. The original FM app is the same codebase; the visible app and package now cover both algorithms.
 
+**Live demo:** [superzeldalink.github.io/hypergraph-partition-lab](https://superzeldalink.github.io/hypergraph-partition-lab/)
+
 ![Partition Lab critical-net example](docs/screenshot.png)
 
 ## Run it
